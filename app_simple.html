@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🌱 ETH 2025 Survival Survey Dashboard</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>">
+    
+    <!-- Shinylive CSS and JS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/shinylive@0.2.3/shinylive.css">
+    <script src="https://cdn.jsdelivr.net/npm/shinylive@0.2.3/shinylive.js"></script>
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            text-align: center;
+            color: white;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.1);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5rem;
+            font-weight: 300;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 200px;
+            color: white;
+            font-size: 1.2rem;
+        }
+        
+        .spinner {
+            border: 3px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top: 3px solid white;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+            margin-right: 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .app-container {
+            background: white;
+            margin: 20px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            overflow: hidden;
+            min-height: calc(100vh - 200px);
+        }
+        
+        .error-message {
+            background: #ff6b6b;
+            color: white;
+            padding: 20px;
+            margin: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 2rem;
+            }
+            
+            .app-container {
+                margin: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🌱 ETH 2025 Survival Survey Dashboard</h1>
+        <p>Monitoring agricultural tree survival and survey quality across Ethiopia</p>
+    </div>
+    
+    <div class="app-container">
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            Loading dashboard...
+        </div>
+        <div id="app"></div>
+    </div>
+
+    <script>
+        // Initialize Shinylive app
+        async function initApp() {
+            try {
+                // Show loading
+                document.getElementById('loading').style.display = 'flex';
+                
+                // Simplified app code for Shinylive compatibility
+                const appCode = `
+library(shiny)
+library(DT)
+library(plotly)
+
+# Create sample data
+create_sample_data <- function() {
+  set.seed(123)
+  n <- 200
+  
+  data.frame(
+    date = seq(from = Sys.Date() - 30, to = Sys.Date(), length.out = n),
+    enumerator = sample(paste0("Enum_", 1:10), n, replace = TRUE),
+    site = sample(c("Core", "Extension", "Control"), n, replace = TRUE),
+    woreda = sample(c("Aneded", "Becho", "Dendi", "Jeldu"), n, replace = TRUE),
+    surveys = sample(1:8, n, replace = TRUE),
+    duration = round(runif(n, 15, 45), 1),
+    gesho_planted = sample(0:20, n, replace = TRUE),
+    gesho_survived = NA,
+    coffee_planted = sample(0:30, n, replace = TRUE),
+    coffee_survived = NA,
+    moringa_planted = sample(0:15, n, replace = TRUE),
+    moringa_survived = NA,
+    stringsAsFactors = FALSE
+  ) %>%
+    mutate(
+      gesho_survived = pmax(0, round(gesho_planted * runif(n, 0.6, 0.9))),
+      coffee_survived = pmax(0, round(coffee_planted * runif(n, 0.7, 0.95))),
+      moringa_survived = pmax(0, round(moringa_planted * runif(n, 0.8, 0.95)))
+    )
+}
+
+# UI
+ui <- fluidPage(
+  titlePanel("🌱 ETH 2025 Survival Survey Dashboard"),
+  
+  navbarPage(
+    "",
+    
+    # Summary Tab
+    tabPanel("📊 Summary",
+      fluidRow(
+        column(3, 
+          div(style = "background: #2E8B57; color: white; padding: 20px; border-radius: 10px; text-align: center; margin: 10px;",
+            h3("1,247", style = "margin: 0;"),
+            p("Total Surveys", style = "margin: 5px 0 0 0;")
+          )
+        ),
+        column(3,
+          div(style = "background: #4ECDC4; color: white; padding: 20px; border-radius: 10px; text-align: center; margin: 10px;",
+            h3("1,156", style = "margin: 0;"),
+            p("Completed", style = "margin: 5px 0 0 0;")
+          )
+        ),
+        column(3,
+          div(style = "background: #FF6B6B; color: white; padding: 20px; border-radius: 10px; text-align: center; margin: 10px;",
+            h3("7.3%", style = "margin: 0;"),
+            p("Refusal Rate", style = "margin: 5px 0 0 0;")
+          )
+        ),
+        column(3,
+          div(style = "background: #FFD700; color: white; padding: 20px; border-radius: 10px; text-align: center; margin: 10px;",
+            h3("28.5 min", style = "margin: 0;"),
+            p("Avg Duration", style = "margin: 5px 0 0 0;")
+          )
+        )
+      ),
+      
+      fluidRow(
+        column(8,
+          div(style = "background: white; padding: 20px; border-radius: 10px; margin: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);",
+            h4("📈 Daily Survey Progress"),
+            plotlyOutput("daily_plot", height = "300px")
+          )
+        ),
+        column(4,
+          div(style = "background: white; padding: 20px; border-radius: 10px; margin: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);",
+            h4("🎯 Target Achievement"),
+            plotlyOutput("gauge_plot", height = "300px")
+          )
+        )
+      )
+    ),
+    
+    # Enumerators Tab
+    tabPanel("👥 Enumerators",
+      fluidRow(
+        column(12,
+          div(style = "background: white; padding: 20px; border-radius: 10px; margin: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);",
+            h4("📊 Enumerator Performance"),
+            DT::dataTableOutput("enum_table")
+          )
+        )
+      )
+    ),
+    
+    # Agriculture Tab
+    tabPanel("🌱 Agriculture",
+      fluidRow(
+        column(6,
+          div(style = "background: white; padding: 20px; border-radius: 10px; margin: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);",
+            h4("🌱 Survival Rates by Species"),
+            plotlyOutput("survival_plot", height = "300px")
+          )
+        ),
+        column(6,
+          div(style = "background: white; padding: 20px; border-radius: 10px; margin: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);",
+            h4("📊 Species Performance"),
+            DT::dataTableOutput("species_table")
+          )
+        )
+      )
+    ),
+    
+    # Data Tab
+    tabPanel("📋 Data",
+      fluidRow(
+        column(12,
+          div(style = "background: white; padding: 20px; border-radius: 10px; margin: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);",
+            h4("🔍 Data Explorer"),
+            DT::dataTableOutput("data_table")
+          )
+        )
+      )
+    )
+  )
+)
+
+# Server
+server <- function(input, output, session) {
+  
+  # Load data
+  data <- reactive({
+    create_sample_data()
+  })
+  
+  # Daily progress plot
+  output$daily_plot <- renderPlotly({
+    daily_data <- data() %>%
+      group_by(date) %>%
+      summarise(total_surveys = sum(surveys), .groups = "drop")
+    
+    p <- plot_ly(daily_data, x = ~date, y = ~total_surveys, type = "bar",
+                marker = list(color = "#2E8B57")) %>%
+      layout(
+        title = "",
+        xaxis = list(title = "Date"),
+        yaxis = list(title = "Surveys"),
+        showlegend = FALSE
+      )
+    p
+  })
+  
+  # Gauge plot
+  output$gauge_plot <- renderPlotly({
+    completion_rate <- 32.1  # Sample completion rate
+    
+    plot_ly(
+      type = "indicator",
+      mode = "gauge+number",
+      value = completion_rate,
+      title = list(text = "% Complete"),
+      gauge = list(
+        axis = list(range = list(NULL, 100)),
+        bar = list(color = "#2E8B57"),
+        steps = list(
+          list(range = c(0, 50), color = "#FFE6E6"),
+          list(range = c(50, 80), color = "#FFF4E6"),
+          list(range = c(80, 100), color = "#E6F7E6")
+        )
+      )
+    ) %>%
+      layout(margin = list(l = 20, r = 20, t = 40, b = 20))
+  })
+  
+  # Enumerator table
+  output$enum_table <- DT::renderDataTable({
+    enum_stats <- data() %>%
+      group_by(enumerator) %>%
+      summarise(
+        total_surveys = sum(surveys),
+        avg_duration = round(mean(duration), 1),
+        sites_covered = n_distinct(site),
+        .groups = "drop"
+      ) %>%
+      arrange(desc(total_surveys))
+    
+    DT::datatable(enum_stats, 
+                  options = list(pageLength = 10, scrollX = TRUE),
+                  colnames = c("Enumerator", "Total Surveys", "Avg Duration (min)", "Sites Covered"))
+  })
+  
+  # Survival rates plot
+  output$survival_plot <- renderPlotly({
+    survival_data <- data() %>%
+      summarise(
+        Gesho = round(mean(gesho_survived / pmax(gesho_planted, 1), na.rm = TRUE) * 100, 1),
+        Coffee = round(mean(coffee_survived / pmax(coffee_planted, 1), na.rm = TRUE) * 100, 1),
+        Moringa = round(mean(moringa_survived / pmax(moringa_planted, 1), na.rm = TRUE) * 100, 1)
+      ) %>%
+      pivot_longer(everything(), names_to = "species", values_to = "survival_rate")
+    
+    plot_ly(survival_data, x = ~species, y = ~survival_rate, type = "bar",
+            marker = list(color = c("#FF6B6B", "#FFD700", "#2E8B57"))) %>%
+      layout(
+        title = "",
+        xaxis = list(title = "Species"),
+        yaxis = list(title = "Survival Rate (%)", range = c(0, 100)),
+        showlegend = FALSE
+      )
+  })
+  
+  # Species table
+  output$species_table <- DT::renderDataTable({
+    species_stats <- data() %>%
+      summarise(
+        Species = c("Gesho", "Coffee", "Moringa"),
+        Planted = c(sum(gesho_planted), sum(coffee_planted), sum(moringa_planted)),
+        Survived = c(sum(gesho_survived), sum(coffee_survived), sum(moringa_survived))
+      ) %>%
+      mutate(
+        Survival_Rate = round((Survived / Planted) * 100, 1),
+        Status = case_when(
+          Survival_Rate >= 80 ~ "🟢 Excellent",
+          Survival_Rate >= 60 ~ "🟡 Good",
+          TRUE ~ "🔴 Needs Attention"
+        )
+      )
+    
+    DT::datatable(species_stats, 
+                  options = list(pageLength = 10, scrollX = TRUE),
+                  colnames = c("Species", "Planted", "Survived", "Survival Rate (%)", "Status"))
+  })
+  
+  # Data explorer table
+  output$data_table <- DT::renderDataTable({
+    explorer_data <- data() %>%
+      select(Date = date, Enumerator = enumerator, Site = site, 
+             Woreda = woreda, Surveys = surveys, Duration = duration)
+    
+    DT::datatable(explorer_data, 
+                  options = list(pageLength = 15, scrollX = TRUE),
+                  filter = "top")
+  })
+}
+
+# Run the application
+shinyApp(ui = ui, server = server)
+`;
+
+                // Initialize Shinylive
+                await shinylive.run({
+                    code: appCode,
+                    element: document.getElementById('app')
+                });
+                
+                // Hide loading
+                document.getElementById('loading').style.display = 'none';
+                
+            } catch (error) {
+                console.error('Error initializing app:', error);
+                document.getElementById('loading').innerHTML = 
+                    '<div class="error-message">Error loading dashboard. Please refresh the page or try again later.</div>';
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
