@@ -9,3 +9,5 @@ DT
 htmlwidgets
 crosstalk
 htmltools
+httr
+jsonlite

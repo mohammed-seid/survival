@@ -11,6 +11,8 @@ execute:
 
 ```{r setup}
 #| include: false
+library(httr)
+library(jsonlite)
 library(dplyr)
 library(tidyr)
 library(lubridate)
@@ -19,10 +21,9 @@ library(plotly)
 library(reactable)
 library(DT)
 library(htmlwidgets)
-library(crosstalk)
+library(htmltools)
 library(zoo)
 library(tibble)
-library(htmltools)
 
 # Custom color palette
 custom_colors <- list(
@@ -46,9 +47,90 @@ format_number <- function(x, digits = 0) {
   format(round(x, digits), big.mark = ",", scientific = FALSE)
 }
 
-# Load and process data
-df_raw <- readRDS("myapp/df.rds")
+# Try to load data from CommCare API, fallback to local file if needed
+tryCatch({
+  # Configuration
+  USERNAME <- "mohammed.seidhussen@oneacrefund.org"
+  API_KEY <- "a749d18804539c5a2210817cda29630391a088bd"
+  PROJECT_SPACE <- "oaf-ethiopia"
+  FORM_ID <- "e24ab639e5b7d1b609cf2894f7057b75"
+  
+  # API Endpoint
+  url <- paste0("https://www.commcarehq.org/a/", PROJECT_SPACE, "/api/v0.5/odata/forms/", FORM_ID, "/feed")
+  
+  # Enhanced data fetching with progress tracking
+  limit <- 2000
+  offset <- 0
+  all_records <- list()
+  
+  cat("Fetching data from CommCare...\n")
+  
+  while (TRUE) {
+    # Set query parameters
+    query <- list(
+      limit = limit,
+      offset = offset
+    )
+    
+    # Make API request with timeout
+    response <- GET(
+      url,
+      query = query,
+      authenticate(USERNAME, API_KEY, type = "basic"),
+      timeout(10)
+    )
+    
+    # Check response
+    if (status_code(response) != 200) {
+      cat(paste0("Error: ", status_code(response), "\n"))
+      cat(content(response, "text"), "\n")
+      break
+    }
+    
+    # Parse response
+    data <- fromJSON(content(response, "text"))
+    records <- data$value
+    
+    if (length(records) == 0) {
+      break
+    }
+    
+    # Add records to collection
+    all_records <- c(all_records, records)
+    
+    # Check if we have all records
+    if (length(records) < limit) {
+      break
+    }
+    
+    # Update offset for next page
+    offset <- offset + limit
+    cat(paste0("Fetched ", length(all_records), " records so far...\n"))
+  }
+  
+  # Convert to data frame
+  df_raw <- bind_rows(all_records)
+  
+  # Drop farmer name and phone number 
+  df_raw <- df_raw %>% 
+    select(-any_of(c("farmer_name", "name", "phone_no", "tno")))
+  
+  cat(paste0("Successfully fetched ", nrow(df_raw), " records from CommCare\n"))
+  
+}, error = function(e) {
+  cat("Failed to fetch from CommCare API, using local data file...\n")
+  cat("Error:", e$message, "\n")
+  
+  # Fallback to local file
+  if (file.exists("myapp/df.rds")) {
+    df_raw <<- readRDS("myapp/df.rds")
+    cat(paste0("Loaded ", nrow(df_raw), " records from local file\n"))
+  } else {
+    stop("No data source available. Please ensure either CommCare API is accessible or df.rds file exists.")
+  }
+})
 
+# Process the data
 df_processed <- df_raw %>%
   mutate(across(everything(), ~ na_if(., "---"))) %>%
   mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
@@ -178,7 +260,7 @@ p2
 ```
 :::
 
-### Weekly Performance Trends with Forecasting
+### Weekly Performance Trends with Moving Average
 
 ::: {.plot-container}
 ```{r weekly_trends_advanced}
@@ -220,51 +302,10 @@ p3
 ```
 :::
 
-### Correlation Analysis
+### Time Series Analysis
 
 ::: {.plot-container}
-```{r correlation_analysis}
-#| echo: false
-
-# Correlation matrix of key metrics
-correlation_data <- df_completed %>%
-  select(
-    duration_minutes, hh_size, age, hour_started
-  ) %>%
-  filter(complete.cases(.)) %>%
-  mutate(across(everything(), as.numeric)) %>%
-  cor()
-
-# Convert correlation matrix to long format for heatmap
-cor_long <- correlation_data %>%
-  as.data.frame() %>%
-  rownames_to_column("var1") %>%
-  pivot_longer(-var1, names_to = "var2", values_to = "correlation")
-
-p4 <- plot_ly(
-  data = cor_long,
-  x = ~var1, y = ~var2, z = ~correlation,
-  type = "heatmap",
-  colorscale = list(c(-1, "#dc3545"), c(0, "#f8f9fa"), c(1, "#28a745")),
-  hovertemplate = "Variable 1: %{x}<br>Variable 2: %{y}<br>Correlation: %{z:.3f}<extra></extra>",
-  showscale = TRUE,
-  colorbar = list(title = "Correlation")
-) %>% 
-layout(
-  title = "Correlation Matrix of Key Variables",
-  xaxis = list(title = "Variables"),
-  yaxis = list(title = "Variables"),
-  paper_bgcolor = "transparent"
-)
-
-p4
-```
-:::
-
-### Time Series Decomposition
-
-::: {.plot-container}
-```{r time_series_decomposition}
+```{r time_series_analysis}
 #| echo: false
 
 # Daily survey counts with trend analysis
@@ -278,184 +319,22 @@ daily_data <- df_completed %>%
     residual = surveys - trend
   )
 
-# Create individual plots and combine
-p5_original <- plot_ly(daily_data, x = ~date, y = ~surveys, type = 'scatter', mode = 'lines',
+p5 <- plot_ly(daily_data, x = ~date, y = ~surveys, type = 'scatter', mode = 'lines',
         name = 'Daily Surveys', line = list(color = custom_colors$primary),
         hovertemplate = "Date: %{x}<br>Surveys: %{y}<extra></extra>") %>%
+  add_trace(y = ~trend, name = 'Trend', 
+            line = list(color = custom_colors$danger, width = 3),
+            hovertemplate = "Date: %{x}<br>Trend: %{y:.1f}<extra></extra>") %>%
   layout(
-    title = "Daily Survey Count",
+    title = "Daily Survey Count with Trend",
     xaxis = list(title = "Date"),
     yaxis = list(title = "Surveys"),
     paper_bgcolor = "transparent",
-    showlegend = FALSE
+    showlegend = TRUE,
+    legend = list(orientation = 'h', y = 1.1, x = 0.5, xanchor = 'center')
   )
-
-p5_trend <- plot_ly(daily_data, x = ~date, y = ~trend, type = 'scatter', mode = 'lines',
-        name = 'Trend', line = list(color = custom_colors$danger, width = 3),
-        hovertemplate = "Date: %{x}<br>Trend: %{y:.1f}<extra></extra>") %>%
-  layout(
-    title = "Trend Component",
-    xaxis = list(title = "Date"),
-    yaxis = list(title = "Trend"),
-    paper_bgcolor = "transparent",
-    showlegend = FALSE
-  )
-
-p5_residual <- plot_ly(daily_data, x = ~date, y = ~residual, type = 'scatter', mode = 'lines',
-        name = 'Residuals', line = list(color = custom_colors$secondary),
-        hovertemplate = "Date: %{x}<br>Residual: %{y:.1f}<extra></extra>") %>%
-  layout(
-    title = "Residuals",
-    xaxis = list(title = "Date"),
-    yaxis = list(title = "Residuals"),
-    paper_bgcolor = "transparent",
-    showlegend = FALSE
-  )
-
-# Display the original plot (main one)
-p5 <- p5_original
 
 p5
-```
-:::
-
-### Performance Clustering Analysis
-
-::: {.plot-container}
-```{r clustering_analysis}
-#| echo: false
-
-# Enumerator performance clustering
-enum_performance <- df_completed %>%
-  group_by(username) %>%
-  summarise(
-    total_surveys = n(),
-    avg_duration = mean(duration_minutes, na.rm = TRUE),
-    quality_score = mean(!is_short_survey & !is_night_survey, na.rm = TRUE) * 100,
-    .groups = "drop"
-  ) %>%
-  filter(total_surveys >= 5) # Only include enumerators with at least 5 surveys
-
-# Simple clustering based on performance metrics
-set.seed(123)
-if(nrow(enum_performance) > 3) {
-  cluster_data <- enum_performance %>%
-    select(total_surveys, avg_duration, quality_score) %>%
-    scale()
-  
-  clusters <- kmeans(cluster_data, centers = 3)
-  enum_performance$cluster <- as.factor(clusters$cluster)
-  
-  cluster_colors <- c("1" = custom_colors$success, "2" = custom_colors$warning, "3" = custom_colors$danger)
-  
-  p6 <- plot_ly(enum_performance, 
-          x = ~total_surveys, 
-          y = ~avg_duration, 
-          z = ~quality_score,
-          color = ~cluster,
-          colors = cluster_colors,
-          type = 'scatter3d',
-          mode = 'markers',
-          marker = list(size = 8),
-          text = ~username,
-          hovertemplate = "Enumerator: %{text}<br>Surveys: %{x}<br>Avg Duration: %{y:.1f} min<br>Quality Score: %{z:.1f}%<br>Cluster: %{fullData.name}<extra></extra>") %>%
-    layout(
-      title = "Enumerator Performance Clustering (3D)",
-      scene = list(
-        xaxis = list(title = "Total Surveys"),
-        yaxis = list(title = "Average Duration (min)"),
-        zaxis = list(title = "Quality Score (%)")
-      ),
-      paper_bgcolor = "transparent"
-    )
-  
-  p6
-} else {
-  # Fallback 2D plot if not enough data for clustering
-  p6 <- plot_ly(enum_performance, 
-          x = ~total_surveys, 
-          y = ~avg_duration,
-          type = 'scatter',
-          mode = 'markers',
-          marker = list(size = 10, color = custom_colors$primary),
-          text = ~username,
-          hovertemplate = "Enumerator: %{text}<br>Surveys: %{x}<br>Avg Duration: %{y:.1f} min<extra></extra>") %>%
-    layout(
-      title = "Enumerator Performance Distribution",
-      xaxis = list(title = "Total Surveys"),
-      yaxis = list(title = "Average Duration (min)"),
-      paper_bgcolor = "transparent"
-    )
-  
-  p6
-}
-```
-:::
-
-### Predictive Analytics - Survey Duration
-
-::: {.plot-container}
-```{r predictive_analytics}
-#| echo: false
-
-# Simple linear model for duration prediction
-model_data <- df_completed %>%
-  filter(!is.na(hh_size) & !is.na(age) & !is.na(hour_started)) %>%
-  select(duration_minutes, hh_size, age, hour_started)
-
-if(nrow(model_data) > 50) {
-  # Fit simple linear model
-  lm_model <- lm(duration_minutes ~ hh_size + age + hour_started, data = model_data)
-  
-  # Create predictions
-  model_data$predicted <- predict(lm_model)
-  model_data$residuals <- residuals(lm_model)
-  
-  # R-squared
-  r_squared <- summary(lm_model)$r.squared
-  
-  p7 <- plot_ly(model_data, 
-          x = ~predicted, 
-          y = ~duration_minutes, 
-          type = 'scatter',
-          mode = 'markers',
-          marker = list(color = custom_colors$secondary, opacity = 0.6),
-          hovertemplate = "Predicted: %{x:.1f} min<br>Actual: %{y:.1f} min<extra></extra>") %>%
-    add_trace(
-      x = c(min(model_data$predicted), max(model_data$predicted)),
-      y = c(min(model_data$predicted), max(model_data$predicted)),
-      type = 'scatter',
-      mode = 'lines',
-      line = list(color = custom_colors$danger, dash = "dash"),
-      name = "Perfect Prediction",
-      hovertemplate = "Perfect Prediction Line<extra></extra>"
-    ) %>%
-    layout(
-      title = paste("Duration Prediction Model (R² =", round(r_squared, 3), ")"),
-      xaxis = list(title = "Predicted Duration (min)"),
-      yaxis = list(title = "Actual Duration (min)"),
-      paper_bgcolor = "transparent",
-      showlegend = TRUE
-    )
-  
-  p7
-} else {
-  # Fallback message if not enough data
-  p7 <- plot_ly() %>%
-    add_annotations(
-      text = "Insufficient data for predictive modeling",
-      x = 0.5, y = 0.5,
-      xref = "paper", yref = "paper",
-      showarrow = FALSE,
-      font = list(size = 16, color = custom_colors$dark)
-    ) %>%
-    layout(
-      title = "Predictive Analytics - Survey Duration",
-      paper_bgcolor = "transparent"
-    )
-  
-  p7
-}
 ```
 :::
 

@@ -11,3 +11,5 @@ crosstalk
 zoo
 tibble
 htmltools
+httr
+jsonlite

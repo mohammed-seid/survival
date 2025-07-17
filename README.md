@@ -1,15 +1,15 @@
 # Survival Survey Dashboard - Quarto Website
 
-This interactive Quarto website replaces the original Shiny application with enhanced functionality and better performance. The website provides comprehensive analysis of survey data with interactive filtering and visualization capabilities.
+This interactive Quarto website replaces the original Shiny application with enhanced functionality and better performance. The website provides comprehensive analysis of survey data fetched directly from CommCare with real-time data updates.
 
 ## Features
 
 ### 📊 Executive Summary
 - Key performance indicators (KPIs)
-- Interactive filters for date range, site, woreda, and enumerator
 - Daily survey progress tracking
 - Target achievement monitoring
 - Geographic distribution analysis
+- Weekly trends analysis
 
 ### 👥 Enumerator Performance
 - Individual performance metrics
@@ -33,8 +33,7 @@ This interactive Quarto website replaces the original Shiny application with enh
 - Efficiency scoring
 
 ### 🔍 Data Explorer
-- Advanced interactive filtering
-- Comprehensive data table with export capabilities
+- Interactive data table with export capabilities
 - Dynamic visualizations
 - Cross-tabulation analysis
 - Real-time summary statistics
@@ -42,29 +41,37 @@ This interactive Quarto website replaces the original Shiny application with enh
 ### 📈 Advanced Analytics
 - Survey completion funnel analysis
 - Duration distribution with statistical markers
-- Weekly trends with forecasting
+- Weekly trends with moving averages
 - Correlation analysis
-- Time series decomposition
+- Time series analysis
 - Performance clustering
-- Predictive analytics
+- Statistical summaries
 
-## Interactive Features
+## Data Source
 
-### Global Filters
-- **Date Range**: Filter data by specific date ranges
-- **Site Selection**: Multi-select site filtering
-- **Woreda Selection**: Geographic filtering
-- **Enumerator Selection**: Individual performance tracking
+### CommCare Integration
+The website fetches data directly from CommCare using the API with the following configuration:
 
-### Data Export
-- CSV, Excel, and PDF export capabilities
-- Filtered data export
-- Copy to clipboard functionality
+- **Username**: mohammed.seidhussen@oneacrefund.org
+- **Project Space**: oaf-ethiopia  
+- **Form ID**: e24ab639e5b7d1b609cf2894f7057b75
 
-### Real-time Updates
-- Filters update all visualizations simultaneously
-- Cross-linked interactive elements
-- Responsive design for all screen sizes
+### Data Processing
+- Automatic data fetching with progress tracking
+- Real-time data processing and cleaning
+- Privacy protection (sensitive fields automatically excluded)
+- Data validation and type conversion
+
+### Expected Data Structure
+The data should contain the following key columns:
+- `consent`: Survey consent status
+- `completed_time`, `started_time`: Timestamp data
+- `site`, `woreda`, `username`: Geographic and enumerator information
+- `duration_minutes`: Survey duration
+- `hh_size`, `education_level`, `age`, `sex`: Demographic data
+- `ps_num_planted_*`, `num_surv_*`: Tree planting and survival data
+
+**Note**: Sensitive fields (`farmer_name`, `name`, `phone_no`, `tno`) are automatically excluded for privacy.
 
 ## Technical Requirements
 
@@ -72,6 +79,8 @@ This interactive Quarto website replaces the original Shiny application with enh
 ```r
 install.packages(c(
   "quarto",
+  "httr",
+  "jsonlite", 
   "dplyr", 
   "tidyr",
   "lubridate",
@@ -80,7 +89,9 @@ install.packages(c(
   "reactable",
   "DT",
   "htmlwidgets",
-  "crosstalk"
+  "htmltools",
+  "zoo",
+  "tibble"
 ))
 ```
 
@@ -102,28 +113,51 @@ The website will be generated in the `docs/` folder and can be:
 - Deployed to Netlify, Vercel, or similar platforms
 - Served from any web server
 
-## Data Requirements
+## Key Improvements
 
-The website expects a file named `df.rds` in the `myapp/` directory containing the survey data with the following key columns:
+### Real-time Data
+- Direct CommCare API integration
+- Automatic data fetching and processing
+- No manual data export/import required
+- Always up-to-date information
 
-- `consent`: Survey consent status
-- `completed_time`, `started_time`: Timestamp data
-- `site`, `woreda`, `username`: Geographic and enumerator information
-- `duration_minutes`: Survey duration
-- `hh_size`, `education_level`, `age`, `sex`: Demographic data
-- `ps_num_planted_*`, `num_surv_*`: Tree planting and survival data
+### Enhanced Performance
+- Static generation with interactive JavaScript
+- No server required for hosting
+- Better caching and load times
+- Responsive design for all devices
+
+### Privacy & Security
+- Automatic exclusion of sensitive personal data
+- Secure API authentication
+- No local data storage required
+
+### Interactive Features
+- Advanced data tables with filtering and export
+- Interactive visualizations with hover details
+- Cross-tabulation analysis
+- Statistical summaries and trends
 
 ## Advantages over Shiny App
 
-1. **Better Performance**: Static generation with interactive JavaScript
-2. **No Server Required**: Can be hosted on any static hosting service
-3. **Better SEO**: Search engine friendly
-4. **Offline Capability**: Works without internet connection once loaded
-5. **Version Control Friendly**: All code is in text files
-6. **Easy Deployment**: Simple file upload to hosting service
-7. **Better Caching**: Faster load times for repeat visitors
+1. **Real-time Data**: Direct API integration eliminates manual data updates
+2. **Better Performance**: Static generation with interactive JavaScript
+3. **No Server Required**: Can be hosted on any static hosting service
+4. **Privacy Protection**: Automatic exclusion of sensitive data
+5. **Easy Deployment**: Simple file upload to hosting service
+6. **Better Caching**: Faster load times for repeat visitors
+7. **Mobile Friendly**: Responsive design works on all devices
 
 ## Customization
+
+### API Configuration
+Update the CommCare credentials in each page's setup section:
+```r
+USERNAME <- "your-username@domain.com"
+API_KEY <- "your-api-key"
+PROJECT_SPACE <- "your-project-space"
+FORM_ID <- "your-form-id"
+```
 
 ### Colors and Themes
 Edit `custom.scss` and `styles.css` to modify the visual appearance.

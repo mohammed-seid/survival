@@ -4,21 +4,14 @@
     "href": "site-analysis.html",
     "title": "Site Analysis",
     "section": "",
-    "text": "Site\n\n\n\n\n\n\n\n\nTotal Surveys\n\n\n\n\n\n\nSurvival Rate (%)\n\n\n\n\n\n\nAverage Duration (min)"
-  },
-  {
-    "objectID": "site-analysis.html#site-analysis-filters",
-    "href": "site-analysis.html#site-analysis-filters",
-    "title": "Site Analysis",
-    "section": "",
-    "text": "Site\n\n\n\n\n\n\n\n\nTotal Surveys\n\n\n\n\n\n\nSurvival Rate (%)\n\n\n\n\n\n\nAverage Duration (min)"
+    "text": "Total Sites\n\n\n2\n\n\n\n\nMost Active Site\n\n\nCore\n\n\n\n\nBest Survival Rate\n\n\n70%\n\n\n\n\nAverage Duration\n\n\n626.7 min\n\n\n\n\nTotal Enumerators\n\n\n37"
   },
   {
     "objectID": "site-analysis.html#site-performance-overview",
     "href": "site-analysis.html#site-performance-overview",
     "title": "Site Analysis",
-    "section": "🏢 Site Performance Overview",
-    "text": "🏢 Site Performance Overview\n\n\n\nTotal Sites\n\n\n2\n\n\n\n\nMost Active Site\n\n\nCore\n\n\n\n\nBest Survival Rate\n\n\n70.3%\n\n\n\n\nAverage Duration\n\n\n608.2 min\n\n\n\n\nTotal Enumerators\n\n\n37"
+    "section": "",
+    "text": "Total Sites\n\n\n2\n\n\n\n\nMost Active Site\n\n\nCore\n\n\n\n\nBest Survival Rate\n\n\n70%\n\n\n\n\nAverage Duration\n\n\n626.7 min\n\n\n\n\nTotal Enumerators\n\n\n37"
   },
   {
     "objectID": "site-analysis.html#site-performance-comparison",
@@ -54,41 +47,6 @@
     "title": "Site Analysis",
     "section": "📈 Site Performance Matrix",
     "text": "📈 Site Performance Matrix"
-  },
-  {
-    "objectID": "site-analysis.html#site-rankings",
-    "href": "site-analysis.html#site-rankings",
-    "title": "Site Analysis",
-    "section": "🏆 Site Rankings",
-    "text": "🏆 Site Rankings"
-  },
-  {
-    "objectID": "site-analysis.html#site-efficiency-analysis",
-    "href": "site-analysis.html#site-efficiency-analysis",
-    "title": "Site Analysis",
-    "section": "📊 Site Efficiency Analysis",
-    "text": "📊 Site Efficiency Analysis"
-  },
-  {
-    "objectID": "enumerator-performance.html",
-    "href": "enumerator-performance.html",
-    "title": "Enumerator Performance",
-    "section": "",
-    "text": "Enumerator\n\n\n\n\n\n\n\n\nTotal Surveys\n\n\n\n\n\n\nAverage Duration (min)"
-  },
-  {
-    "objectID": "enumerator-performance.html#performance-filters",
-    "href": "enumerator-performance.html#performance-filters",
-    "title": "Enumerator Performance",
-    "section": "",
-    "text": "Enumerator\n\n\n\n\n\n\n\n\nTotal Surveys\n\n\n\n\n\n\nAverage Duration (min)"
-  },
-  {
-    "objectID": "enumerator-performance.html#individual-performance-overview",
-    "href": "enumerator-performance.html#individual-performance-overview",
-    "title": "Enumerator Performance",
-    "section": "📊 Individual Performance Overview",
-    "text": "📊 Individual Performance Overview"
   },
   {
     "objectID": "enumerator-performance.html#target-vs-actual-performance",
@@ -130,21 +88,14 @@
     "href": "agricultural-analysis.html",
     "title": "Agricultural Analysis",
     "section": "",
-    "text": "Species\n\n\n\n\n\n\n\n\nSurvival Rate (%)\n\n\n\n\n\n\nTrees Planted"
-  },
-  {
-    "objectID": "agricultural-analysis.html#species-analysis-filters",
-    "href": "agricultural-analysis.html#species-analysis-filters",
-    "title": "Agricultural Analysis",
-    "section": "",
-    "text": "Species\n\n\n\n\n\n\n\n\nSurvival Rate (%)\n\n\n\n\n\n\nTrees Planted"
+    "text": "Total Species Tracked\n\n\n8\n\n\n\n\nTotal Trees Planted\n\n\n60,989\n\n\n\n\nTotal Trees Survived\n\n\n42,672\n\n\n\n\nOverall Survival Rate\n\n\n70%\n\n\n\n\nBest Performing Species\n\n\ncoffee"
   },
   {
     "objectID": "agricultural-analysis.html#species-performance-overview",
     "href": "agricultural-analysis.html#species-performance-overview",
     "title": "Agricultural Analysis",
-    "section": "🌱 Species Performance Overview",
-    "text": "🌱 Species Performance Overview\n\n\n\nTotal Species Tracked\n\n\n8\n\n\n\n\nTotal Trees Planted\n\n\n60,989\n\n\n\n\nTotal Trees Survived\n\n\n42,672\n\n\n\n\nOverall Survival Rate\n\n\n70%\n\n\n\n\nBest Performing Species\n\n\ncoffee"
+    "section": "",
+    "text": "Total Species Tracked\n\n\n8\n\n\n\n\nTotal Trees Planted\n\n\n60,989\n\n\n\n\nTotal Trees Survived\n\n\n42,672\n\n\n\n\nOverall Survival Rate\n\n\n70%\n\n\n\n\nBest Performing Species\n\n\ncoffee"
   },
   {
     "objectID": "agricultural-analysis.html#tree-survival-rates-by-species",
@@ -200,21 +151,14 @@
     "href": "data-explorer.html",
     "title": "Data Explorer",
     "section": "",
-    "text": "Date Range\n\n\n\n\n\n\nSite\n\n\n\n\n\n\n\n\nWoreda\n\n\n\n\n\n\n\n\nEnumerator\n\n\n\n\n\n\n\n\nDuration (minutes)\n\n\n\n\n\n\nEducation Level\n\n\n\n\n\n\n\n\nSex\n\n\n\n\n\n\n\n\nDay of Week\n\n\n\n\n\n\n\n\nWeekend Surveys\n\n\n\n\nFALSE\n\n\n\n\n\nTRUE\n\n\n\n\n\n\n\n\nNight Surveys\n\n\n\n\nFALSE\n\n\n\n\n\nTRUE\n\n\n\n\n\n\n\n\nShort Surveys (&lt;5min)\n\n\n\n\nFALSE\n\n\n\n\n\nTRUE"
+    "text": "Total Records\n\n\n433\n\n\n\n\nUnique Sites\n\n\n2\n\n\n\n\nUnique Enumerators\n\n\n20\n\n\n\n\nAverage Duration\n\n\n640.7 min\n\n\n\n\nDate Range\n\n\n2025-07-13 to 2025-07-18"
   },
   {
-    "objectID": "data-explorer.html#advanced-data-filters",
-    "href": "data-explorer.html#advanced-data-filters",
+    "objectID": "data-explorer.html#data-summary",
+    "href": "data-explorer.html#data-summary",
     "title": "Data Explorer",
     "section": "",
-    "text": "Date Range\n\n\n\n\n\n\nSite\n\n\n\n\n\n\n\n\nWoreda\n\n\n\n\n\n\n\n\nEnumerator\n\n\n\n\n\n\n\n\nDuration (minutes)\n\n\n\n\n\n\nEducation Level\n\n\n\n\n\n\n\n\nSex\n\n\n\n\n\n\n\n\nDay of Week\n\n\n\n\n\n\n\n\nWeekend Surveys\n\n\n\n\nFALSE\n\n\n\n\n\nTRUE\n\n\n\n\n\n\n\n\nNight Surveys\n\n\n\n\nFALSE\n\n\n\n\n\nTRUE\n\n\n\n\n\n\n\n\nShort Surveys (&lt;5min)\n\n\n\n\nFALSE\n\n\n\n\n\nTRUE"
-  },
-  {
-    "objectID": "data-explorer.html#filtered-data-summary",
-    "href": "data-explorer.html#filtered-data-summary",
-    "title": "Data Explorer",
-    "section": "📊 Filtered Data Summary",
-    "text": "📊 Filtered Data Summary\n\n\n\nFiltered Records\n\n\nLoading…\n\n\n\n\nUnique Sites\n\n\nLoading…\n\n\n\n\nUnique Enumerators\n\n\nLoading…\n\n\n\n\nAverage Duration\n\n\nLoading…\n\n\n\n\nDate Range\n\n\nLoading…"
+    "text": "Total Records\n\n\n433\n\n\n\n\nUnique Sites\n\n\n2\n\n\n\n\nUnique Enumerators\n\n\n20\n\n\n\n\nAverage Duration\n\n\n640.7 min\n\n\n\n\nDate Range\n\n\n2025-07-13 to 2025-07-18"
   },
   {
     "objectID": "data-explorer.html#interactive-data-table",
@@ -224,11 +168,39 @@
     "text": "🔍 Interactive Data Table"
   },
   {
-    "objectID": "data-explorer.html#dynamic-visualizations",
-    "href": "data-explorer.html#dynamic-visualizations",
+    "objectID": "data-explorer.html#survey-distribution-over-time",
+    "href": "data-explorer.html#survey-distribution-over-time",
     "title": "Data Explorer",
-    "section": "📈 Dynamic Visualizations",
-    "text": "📈 Dynamic Visualizations\n\nSurvey Distribution by Selected Filters\n\n\n\n\n\n\n\n\n\n\nDuration Analysis\n\n\n\n\n\n\n\n\n\n\nSite and Enumerator Distribution\n\n\n\n\n\n\n\n\n\n\nDemographic Analysis\n\n\n\n\n\n\n\n\n\n\nSurvey Quality Metrics"
+    "section": "📈 Survey Distribution Over Time",
+    "text": "📈 Survey Distribution Over Time"
+  },
+  {
+    "objectID": "data-explorer.html#duration-analysis",
+    "href": "data-explorer.html#duration-analysis",
+    "title": "Data Explorer",
+    "section": "📊 Duration Analysis",
+    "text": "📊 Duration Analysis"
+  },
+  {
+    "objectID": "data-explorer.html#site-distribution",
+    "href": "data-explorer.html#site-distribution",
+    "title": "Data Explorer",
+    "section": "🏢 Site Distribution",
+    "text": "🏢 Site Distribution"
+  },
+  {
+    "objectID": "data-explorer.html#demographic-analysis",
+    "href": "data-explorer.html#demographic-analysis",
+    "title": "Data Explorer",
+    "section": "👥 Demographic Analysis",
+    "text": "👥 Demographic Analysis"
+  },
+  {
+    "objectID": "data-explorer.html#survey-quality-metrics",
+    "href": "data-explorer.html#survey-quality-metrics",
+    "title": "Data Explorer",
+    "section": "📊 Survey Quality Metrics",
+    "text": "📊 Survey Quality Metrics"
   },
   {
     "objectID": "data-explorer.html#cross-tabulation-analysis",
@@ -242,21 +214,14 @@
     "href": "index.html",
     "title": "Executive Summary",
     "section": "",
-    "text": "Date Range\n\n\n\n\n\n\nSite\n\n\n\n\n\n\n\n\nWoreda\n\n\n\n\n\n\n\n\nEnumerator"
-  },
-  {
-    "objectID": "index.html#interactive-filters",
-    "href": "index.html#interactive-filters",
-    "title": "Executive Summary",
-    "section": "",
-    "text": "Date Range\n\n\n\n\n\n\nSite\n\n\n\n\n\n\n\n\nWoreda\n\n\n\n\n\n\n\n\nEnumerator"
+    "text": "Total Surveys\n\n\n358\n\n\n\n\nCompleted Surveys\n\n\n353\n\n\n\n\nRefusal Rate\n\n\n0%\n\n\n\n\nAvg. Duration\n\n\n590 min\n\n\n\n\nUnique Enumerators\n\n\n20"
   },
   {
     "objectID": "index.html#key-performance-indicators",
     "href": "index.html#key-performance-indicators",
     "title": "Executive Summary",
-    "section": "📊 Key Performance Indicators",
-    "text": "📊 Key Performance Indicators\n\n\n\nTotal Surveys\n\n\n358\n\n\n\n\nCompleted Surveys\n\n\n353\n\n\n\n\nRefusal Rate\n\n\n0%\n\n\n\n\nAvg. Duration\n\n\n590 min\n\n\n\n\nUnique Enumerators\n\n\n20"
+    "section": "",
+    "text": "Total Surveys\n\n\n358\n\n\n\n\nCompleted Surveys\n\n\n353\n\n\n\n\nRefusal Rate\n\n\n0%\n\n\n\n\nAvg. Duration\n\n\n590 min\n\n\n\n\nUnique Enumerators\n\n\n20"
   },
   {
     "objectID": "index.html#daily-survey-progress",
@@ -271,13 +236,6 @@
     "title": "Executive Summary",
     "section": "🎯 Target Achievement",
     "text": "🎯 Target Achievement"
-  },
-  {
-    "objectID": "index.html#interactive-survey-data",
-    "href": "index.html#interactive-survey-data",
-    "title": "Executive Summary",
-    "section": "📊 Interactive Survey Data",
-    "text": "📊 Interactive Survey Data"
   },
   {
     "objectID": "index.html#weekly-trends",

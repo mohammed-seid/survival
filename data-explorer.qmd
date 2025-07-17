@@ -11,6 +11,8 @@ execute:
 
 ```{r setup}
 #| include: false
+library(httr)
+library(jsonlite)
 library(dplyr)
 library(tidyr)
 library(lubridate)
@@ -19,7 +21,6 @@ library(plotly)
 library(reactable)
 library(DT)
 library(htmlwidgets)
-library(crosstalk)
 library(htmltools)
 
 # Custom color palette
@@ -44,9 +45,90 @@ format_number <- function(x, digits = 0) {
   format(round(x, digits), big.mark = ",", scientific = FALSE)
 }
 
-# Load and process data
-df_raw <- readRDS("myapp/df.rds")
+# Try to load data from CommCare API, fallback to local file if needed
+tryCatch({
+  # Configuration
+  USERNAME <- "mohammed.seidhussen@oneacrefund.org"
+  API_KEY <- "a749d18804539c5a2210817cda29630391a088bd"
+  PROJECT_SPACE <- "oaf-ethiopia"
+  FORM_ID <- "e24ab639e5b7d1b609cf2894f7057b75"
+  
+  # API Endpoint
+  url <- paste0("https://www.commcarehq.org/a/", PROJECT_SPACE, "/api/v0.5/odata/forms/", FORM_ID, "/feed")
+  
+  # Enhanced data fetching with progress tracking
+  limit <- 2000
+  offset <- 0
+  all_records <- list()
+  
+  cat("Fetching data from CommCare...\n")
+  
+  while (TRUE) {
+    # Set query parameters
+    query <- list(
+      limit = limit,
+      offset = offset
+    )
+    
+    # Make API request with timeout
+    response <- GET(
+      url,
+      query = query,
+      authenticate(USERNAME, API_KEY, type = "basic"),
+      timeout(10)
+    )
+    
+    # Check response
+    if (status_code(response) != 200) {
+      cat(paste0("Error: ", status_code(response), "\n"))
+      cat(content(response, "text"), "\n")
+      break
+    }
+    
+    # Parse response
+    data <- fromJSON(content(response, "text"))
+    records <- data$value
+    
+    if (length(records) == 0) {
+      break
+    }
+    
+    # Add records to collection
+    all_records <- c(all_records, records)
+    
+    # Check if we have all records
+    if (length(records) < limit) {
+      break
+    }
+    
+    # Update offset for next page
+    offset <- offset + limit
+    cat(paste0("Fetched ", length(all_records), " records so far...\n"))
+  }
+  
+  # Convert to data frame
+  df_raw <- bind_rows(all_records)
+  
+  # Drop farmer name and phone number 
+  df_raw <- df_raw %>% 
+    select(-any_of(c("farmer_name", "name", "phone_no", "tno")))
+  
+  cat(paste0("Successfully fetched ", nrow(df_raw), " records from CommCare\n"))
+  
+}, error = function(e) {
+  cat("Failed to fetch from CommCare API, using local data file...\n")
+  cat("Error:", e$message, "\n")
+  
+  # Fallback to local file
+  if (file.exists("myapp/df.rds")) {
+    df_raw <<- readRDS("myapp/df.rds")
+    cat(paste0("Loaded ", nrow(df_raw), " records from local file\n"))
+  } else {
+    stop("No data source available. Please ensure either CommCare API is accessible or df.rds file exists.")
+  }
+})
 
+# Process the data
 df_processed <- df_raw %>%
   mutate(across(everything(), ~ na_if(., "---"))) %>%
   mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
@@ -77,71 +159,29 @@ explorer_data <- df_completed %>%
     Enumerator = username,
     Site = site,
     Woreda = woreda,
-    `Duration (min)` = duration_minutes,
-    `HH Size` = hh_size,
+    Duration_min = duration_minutes,
+    HH_Size = hh_size,
     Education = education_level,
     Age = age,
     Sex = sex,
-    `Day of Week` = day_of_week,
-    `Hour Started` = hour_started,
-    `Is Weekend` = is_weekend,
-    `Is Night Survey` = is_night_survey,
-    `Is Short Survey` = is_short_survey
+    Day_of_Week = day_of_week,
+    Hour_Started = hour_started,
+    Is_Weekend = is_weekend,
+    Is_Night_Survey = is_night_survey,
+    Is_Short_Survey = is_short_survey
   ) %>%
   arrange(desc(Date))
-
-# Create shared data for crosstalk
-shared_explorer_data <- SharedData$new(explorer_data)
 ```
 
-::: {.filter-section}
-## 🔍 Advanced Data Filters
-
-::: {.interactive-controls}
-```{r explorer_filters}
-#| echo: false
-
-# Date filter
-filter_slider("Date", "Date Range", shared_explorer_data, ~Date, step = 1)
-
-# Site filter
-filter_select("Site", "Site", shared_explorer_data, ~Site, multiple = TRUE)
-
-# Woreda filter
-filter_select("Woreda", "Woreda", shared_explorer_data, ~Woreda, multiple = TRUE)
-
-# Enumerator filter
-filter_select("Enumerator", "Enumerator", shared_explorer_data, ~Enumerator, multiple = TRUE)
-
-# Duration filter
-filter_slider("Duration (min)", "Duration (minutes)", shared_explorer_data, ~`Duration (min)`)
-
-# Education filter
-filter_select("Education", "Education Level", shared_explorer_data, ~Education, multiple = TRUE)
-
-# Sex filter
-filter_select("Sex", "Sex", shared_explorer_data, ~Sex, multiple = TRUE)
-
-# Day of week filter
-filter_select("Day of Week", "Day of Week", shared_explorer_data, ~`Day of Week`, multiple = TRUE)
-
-# Boolean filters
-filter_checkbox("Is Weekend", "Weekend Surveys", shared_explorer_data, ~`Is Weekend`)
-filter_checkbox("Is Night Survey", "Night Surveys", shared_explorer_data, ~`Is Night Survey`)
-filter_checkbox("Is Short Survey", "Short Surveys (<5min)", shared_explorer_data, ~`Is Short Survey`)
-```
-:::
-:::
-
-## 📊 Filtered Data Summary
+## 📊 Data Summary
 
 ::: {.dashboard-grid}
 ::: {.metric-card}
 ::: {.metric-label}
-Filtered Records
+Total Records
 :::
-::: {.metric-value id="filtered-count"}
-Loading...
+::: {.metric-value}
+`r format_number(nrow(explorer_data))`
 :::
 :::
 
@@ -149,8 +189,8 @@ Loading...
 ::: {.metric-label}
 Unique Sites
 :::
-::: {.metric-value id="unique-sites"}
-Loading...
+::: {.metric-value}
+`r n_distinct(explorer_data$Site)`
 :::
 :::
 
@@ -158,8 +198,8 @@ Loading...
 ::: {.metric-label}
 Unique Enumerators
 :::
-::: {.metric-value id="unique-enumerators"}
-Loading...
+::: {.metric-value}
+`r n_distinct(explorer_data$Enumerator)`
 :::
 :::
 
@@ -167,8 +207,8 @@ Loading...
 ::: {.metric-label}
 Average Duration
 :::
-::: {.metric-value id="avg-duration"}
-Loading...
+::: {.metric-value}
+`r round(mean(explorer_data$Duration_min, na.rm = TRUE), 1)` min
 :::
 :::
 
@@ -176,8 +216,8 @@ Loading...
 ::: {.metric-label}
 Date Range
 :::
-::: {.metric-value id="date-range"}
-Loading...
+::: {.metric-value}
+`r min(explorer_data$Date)` to `r max(explorer_data$Date)`
 :::
 :::
 :::
@@ -190,7 +230,7 @@ Loading...
 
 # Create enhanced interactive table
 DT::datatable(
-  shared_explorer_data,
+  explorer_data,
   options = list(
     pageLength = 15,
     scrollX = TRUE,
@@ -211,41 +251,46 @@ DT::datatable(
   rownames = FALSE,
   class = 'cell-border stripe hover'
 ) %>%
-  DT::formatRound(columns = c("Duration (min)"), digits = 1) %>%
+  DT::formatRound(columns = c("Duration_min"), digits = 1) %>%
   DT::formatDate(columns = "Date", method = "toLocaleDateString") %>%
   DT::formatStyle(
-    "Duration (min)",
+    "Duration_min",
     backgroundColor = DT::styleInterval(c(5, 30, 60), c("#ffebee", "#fff8e1", "#e8f5e8", "#ffebee"))
   ) %>%
   DT::formatStyle(
-    "Is Short Survey",
+    "Is_Short_Survey",
     backgroundColor = DT::styleEqual(TRUE, "#ffebee")
   ) %>%
   DT::formatStyle(
-    "Is Night Survey", 
+    "Is_Night_Survey", 
     backgroundColor = DT::styleEqual(TRUE, "#fff8e1")
   ) %>%
   DT::formatStyle(
-    "Is Weekend",
+    "Is_Weekend",
     backgroundColor = DT::styleEqual(TRUE, "#e3f2fd")
   )
 ```
 :::
 
-## 📈 Dynamic Visualizations
-
-### Survey Distribution by Selected Filters
+## 📈 Survey Distribution Over Time
 
 ::: {.plot-container}
-```{r dynamic_plots}
+```{r time_distribution}
 #| echo: false
 
 # Time series plot
-p1 <- plot_ly(shared_explorer_data, 
+daily_counts <- explorer_data %>%
+  count(Date) %>%
+  arrange(Date)
+
+p1 <- plot_ly(daily_counts, 
         x = ~Date, 
-        type = 'histogram',
-        marker = list(color = custom_colors$primary),
-        hovertemplate = "Date: %{x}<br>Count: %{y}<extra></extra>") %>%
+        y = ~n,
+        type = 'scatter',
+        mode = 'lines+markers',
+        line = list(color = custom_colors$primary, width = 2),
+        marker = list(color = custom_colors$primary, size = 6),
+        hovertemplate = "Date: %{x}<br>Surveys: %{y}<extra></extra>") %>%
   layout(
     title = "Survey Distribution Over Time",
     xaxis = list(title = "Date"),
@@ -259,15 +304,15 @@ p1
 ```
 :::
 
-### Duration Analysis
+## 📊 Duration Analysis
 
 ::: {.plot-container}
 ```{r duration_analysis}
 #| echo: false
 
 # Duration histogram
-p2 <- plot_ly(shared_explorer_data, 
-        x = ~`Duration (min)`, 
+p2 <- plot_ly(explorer_data, 
+        x = ~Duration_min, 
         type = 'histogram',
         nbinsx = 30,
         marker = list(color = custom_colors$secondary),
@@ -285,19 +330,19 @@ p2
 ```
 :::
 
-### Site and Enumerator Distribution
+## 🏢 Site Distribution
 
 ::: {.plot-container}
-```{r site_enum_distribution}
+```{r site_distribution}
 #| echo: false
 
 # Site distribution
-site_counts <- df_completed %>%
-  count(site, sort = TRUE) %>%
+site_counts <- explorer_data %>%
+  count(Site, sort = TRUE) %>%
   head(15)
 
 p3 <- plot_ly(site_counts, 
-        x = ~reorder(site, -n), 
+        x = ~reorder(Site, -n), 
         y = ~n, 
         type = 'bar',
         marker = list(color = custom_colors$gradient[3]),
@@ -316,19 +361,19 @@ p3
 ```
 :::
 
-### Demographic Analysis
+## 👥 Demographic Analysis
 
 ::: {.plot-container}
 ```{r demographic_analysis}
 #| echo: false
 
 # Education level distribution
-education_counts <- df_completed %>%
-  filter(!is.na(education_level)) %>%
-  count(education_level, sort = TRUE)
+education_counts <- explorer_data %>%
+  filter(!is.na(Education)) %>%
+  count(Education, sort = TRUE)
 
 p4 <- plot_ly(education_counts, 
-        labels = ~education_level, 
+        labels = ~Education, 
         values = ~n, 
         type = 'pie',
         textposition = 'inside',
@@ -348,20 +393,20 @@ p4
 ```
 :::
 
-### Survey Quality Metrics
+## 📊 Survey Quality Metrics
 
 ::: {.plot-container}
 ```{r quality_metrics}
 #| echo: false
 
 # Quality metrics by day of week
-quality_by_day <- df_completed %>%
-  group_by(day_of_week) %>%
+quality_by_day <- explorer_data %>%
+  group_by(Day_of_Week) %>%
   summarise(
     total_surveys = n(),
-    short_surveys = sum(is_short_survey, na.rm = TRUE),
-    night_surveys = sum(is_night_survey, na.rm = TRUE),
-    avg_duration = mean(duration_minutes, na.rm = TRUE),
+    short_surveys = sum(Is_Short_Survey, na.rm = TRUE),
+    night_surveys = sum(Is_Night_Survey, na.rm = TRUE),
+    avg_duration = mean(Duration_min, na.rm = TRUE),
     .groups = "drop"
   ) %>%
   mutate(
@@ -369,7 +414,7 @@ quality_by_day <- df_completed %>%
     night_rate = (night_surveys / total_surveys) * 100
   )
 
-p5 <- plot_ly(quality_by_day, x = ~day_of_week, y = ~short_rate, 
+p5 <- plot_ly(quality_by_day, x = ~Day_of_Week, y = ~short_rate, 
         type = 'bar', name = 'Short Survey Rate (%)',
         marker = list(color = custom_colors$danger),
         hovertemplate = "Day: %{x}<br>Short Survey Rate: %{y:.1f}%<extra></extra>") %>%
@@ -397,16 +442,16 @@ p5
 #| echo: false
 
 # Create cross-tabulation of Site vs Education Level
-crosstab_data <- df_completed %>%
-  filter(!is.na(education_level) & !is.na(site)) %>%
-  count(site, education_level) %>%
-  pivot_wider(names_from = education_level, values_from = n, values_fill = 0) %>%
-  arrange(desc(rowSums(select(., -site))))
+crosstab_data <- explorer_data %>%
+  filter(!is.na(Education) & !is.na(Site)) %>%
+  count(Site, Education) %>%
+  pivot_wider(names_from = Education, values_from = n, values_fill = 0) %>%
+  arrange(desc(rowSums(select(., -Site))))
 
 reactable(
   crosstab_data,
   columns = list(
-    site = colDef(
+    Site = colDef(
       name = "Site", 
       minWidth = 150,
       cell = function(value) {
@@ -426,19 +471,3 @@ reactable(
 )
 ```
 :::
-
-<script>
-// Update summary statistics based on filtered data
-function updateSummaryStats() {
-  // This would be updated by crosstalk when filters change
-  // For now, showing static values
-  document.getElementById('filtered-count').textContent = '${nrow(explorer_data)}';
-  document.getElementById('unique-sites').textContent = '${n_distinct(explorer_data$Site)}';
-  document.getElementById('unique-enumerators').textContent = '${n_distinct(explorer_data$Enumerator)}';
-  document.getElementById('avg-duration').textContent = '${round(mean(explorer_data$`Duration (min)`, na.rm = TRUE), 1)} min';
-  document.getElementById('date-range').textContent = '${min(explorer_data$Date)} to ${max(explorer_data$Date)}';
-}
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', updateSummaryStats);
-</script>
