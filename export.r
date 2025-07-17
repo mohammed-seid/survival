@@ -90,12 +90,18 @@ shinylive::assets_info()
 
 unlink("docs", recursive = TRUE)
 
+options(timeout = 300)
+
 # Export the Shiny app to a static site
 shinylive::export("myapp", "docs")
 
 # Serve the static site using httpuv
 library(httpuv)
+
 # Set the working directory to the docs folder
 httpuv::runStaticServer("docs")
+
+httpuv::runStaticServer("docs")  # Open browser to check for errors
+
 
 
