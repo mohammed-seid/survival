@@ -1,0 +1,441 @@
+---
+title: "Agricultural Analysis"
+format: 
+  html:
+    page-layout: full
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(plotly)
+library(reactable)
+library(DT)
+library(htmlwidgets)
+library(crosstalk)
+library(htmltools)
+
+# Custom color palette
+custom_colors <- list(
+  primary = "#2E8B57",
+  secondary = "#20B2AA", 
+  success = "#28a745",
+  warning = "#ffc107",
+  danger = "#dc3545",
+  info = "#17a2b8",
+  light = "#f8f9fa",
+  dark = "#343a40",
+  gradient = c("#2E8B57", "#20B2AA", "#66CDAA", "#98FB98", "#90EE90")
+)
+
+# Helper functions
+format_percent <- function(x, digits = 1) {
+  paste0(round(x * 100, digits), "%")
+}
+
+format_number <- function(x, digits = 0) {
+  format(round(x, digits), big.mark = ",", scientific = FALSE)
+}
+
+# Load and process data
+df_raw <- readRDS("myapp/df.rds")
+
+df_processed <- df_raw %>%
+  mutate(across(everything(), ~ na_if(., "---"))) %>%
+  mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
+  mutate(
+    completed_time = ymd_hms(completed_time),
+    started_time = ymd_hms(started_time)
+  ) %>%
+  mutate(
+    date = as.Date(completed_time),
+    week = floor_date(date, "week"),
+    month = floor_date(date, "month"),
+    hour_started = hour(started_time),
+    day_of_week = wday(date, label = TRUE, week_start = 1),
+    is_weekend = day_of_week %in% c("Sat", "Sun"),
+    duration_minutes = as.numeric(difftime(completed_time, started_time, units = "mins")),
+    is_night_survey = hour_started >= 19 | hour_started < 6,
+    is_short_survey = duration_minutes <= 5,
+    is_long_survey = duration_minutes >= 60
+  ) %>%
+  mutate(across(c(starts_with("ps_num_planted_"), starts_with("num_surv_")), as.numeric))
+
+df_completed <- df_processed %>% filter(consent == 1)
+
+# Species analysis
+species_data <- df_completed %>%
+  select(starts_with("ps_num_planted_"), starts_with("num_surv_")) %>%
+  pivot_longer(everything(), names_to = "key", values_to = "value") %>%
+  mutate(
+    type = ifelse(str_detect(key, "ps_num_planted"), "planted", "survived"),
+    species = str_remove_all(key, "ps_num_planted_|num_surv_")
+  ) %>%
+  group_by(species, type) %>%
+  summarise(total = sum(value, na.rm = TRUE), .groups = "drop") %>%
+  pivot_wider(names_from = type, values_from = total) %>%
+  mutate(
+    planted = ifelse(is.na(planted), 0, planted),
+    survived = ifelse(is.na(survived), 0, survived),
+    survival_rate = ifelse(planted > 0, (survived / planted) * 100, 0),
+    loss_count = planted - survived,
+    loss_rate = ifelse(planted > 0, (loss_count / planted) * 100, 0)
+  ) %>%
+  filter(planted > 0) %>%
+  arrange(desc(survival_rate))
+
+# Create shared data for crosstalk
+shared_species_data <- SharedData$new(species_data)
+```
+
+::: {.filter-section}
+## 🔍 Species Analysis Filters
+
+::: {.interactive-controls}
+```{r species_filters}
+#| echo: false
+
+# Species filter
+filter_select("species", "Species", shared_species_data, ~species, multiple = TRUE)
+
+# Survival rate filter
+filter_slider("survival_rate", "Survival Rate (%)", shared_species_data, ~survival_rate)
+
+# Planted count filter
+filter_slider("planted", "Trees Planted", shared_species_data, ~planted)
+```
+:::
+:::
+
+## 🌱 Species Performance Overview
+
+::: {.dashboard-grid}
+::: {.metric-card}
+::: {.metric-label}
+Total Species Tracked
+:::
+::: {.metric-value}
+`r nrow(species_data)`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Total Trees Planted
+:::
+::: {.metric-value}
+`r format_number(sum(species_data$planted, na.rm = TRUE))`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Total Trees Survived
+:::
+::: {.metric-value}
+`r format_number(sum(species_data$survived, na.rm = TRUE))`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Overall Survival Rate
+:::
+::: {.metric-value}
+`r format_percent(sum(species_data$survived, na.rm = TRUE) / sum(species_data$planted, na.rm = TRUE))`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Best Performing Species
+:::
+::: {.metric-value}
+`r species_data$species[1]`
+:::
+:::
+:::
+
+## 🌱 Tree Survival Rates by Species
+
+::: {.plot-container}
+```{r survival_rates_plot}
+#| echo: false
+
+p1 <- plot_ly(species_data, 
+        x = ~reorder(species, survival_rate), 
+        y = ~survival_rate, 
+        type = 'bar', 
+        marker = list(
+          color = ~survival_rate, 
+          colorscale = list(c(0, "#ffcdd2"), c(1, custom_colors$success)),
+          showscale = TRUE,
+          colorbar = list(title = "Survival Rate (%)")
+        ),
+        hovertemplate = "Species: %{x}<br>Survival Rate: %{y:.1f}%<br>Planted: %{customdata[0]}<br>Survived: %{customdata[1]}<extra></extra>",
+        customdata = ~cbind(planted, survived)) %>%
+  layout(
+    title = "Tree Survival Rates by Species",
+    xaxis = list(title = "Species", tickangle = -45),
+    yaxis = list(title = "Survival Rate (%)", range = c(0, 100)),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    margin = list(b = 120)
+  )
+
+p1
+```
+:::
+
+## 📊 Detailed Species Performance Table
+
+::: {.table-container}
+```{r species_table}
+#| echo: false
+
+reactable(
+  shared_species_data,
+  columns = list(
+    species = colDef(
+      name = "Species", 
+      minWidth = 150,
+      cell = function(value) {
+        div(style = "font-weight: bold; color: #2E8B57;", value)
+      }
+    ),
+    planted = colDef(
+      name = "Trees Planted", 
+      align = "center",
+      format = colFormat(separators = TRUE)
+    ),
+    survived = colDef(
+      name = "Trees Survived", 
+      align = "center",
+      format = colFormat(separators = TRUE)
+    ),
+    loss_count = colDef(
+      name = "Trees Lost", 
+      align = "center",
+      format = colFormat(separators = TRUE),
+      cell = function(value) {
+        if (value > 0) {
+          div(style = "color: #dc3545; font-weight: bold;", format(value, big.mark = ","))
+        } else {
+          div(style = "color: #28a745;", "0")
+        }
+      }
+    ),
+    survival_rate = colDef(
+      name = "Survival Rate (%)",
+      align = "center",
+      format = colFormat(digits = 1),
+      cell = function(value) {
+        color <- if (value >= 80) {
+          "#A5D6A7"
+        } else if (value >= 60) {
+          "#FFF9C4"
+        } else {
+          "#FFCDD2"
+        }
+        div(
+          style = paste("background:", color, "; padding: 4px; border-radius: 4px; font-weight: bold;"),
+          paste0(round(value, 1), "%")
+        )
+      }
+    ),
+    loss_rate = colDef(
+      name = "Loss Rate (%)",
+      align = "center",
+      format = colFormat(digits = 1),
+      cell = function(value) {
+        color <- if (value <= 20) {
+          "#A5D6A7"
+        } else if (value <= 40) {
+          "#FFF9C4"
+        } else {
+          "#FFCDD2"
+        }
+        div(
+          style = paste("background:", color, "; padding: 4px; border-radius: 4px; font-weight: bold;"),
+          paste0(round(value, 1), "%")
+        )
+      }
+    )
+  ),
+  defaultPageSize = 10, 
+  searchable = TRUE, 
+  highlight = TRUE, 
+  bordered = TRUE, 
+  striped = TRUE,
+  theme = reactableTheme(
+    headerStyle = list(backgroundColor = "#f8f9fa", fontWeight = "bold"),
+    cellStyle = list(fontSize = "0.9em")
+  )
+)
+```
+:::
+
+## 📈 Planted vs Survived Comparison
+
+::: {.plot-container}
+```{r planted_vs_survived}
+#| echo: false
+
+p2 <- plot_ly(species_data, 
+        x = ~planted, 
+        y = ~survived, 
+        type = 'scatter',
+        mode = 'markers',
+        marker = list(
+          size = 12,
+          color = ~survival_rate,
+          colorscale = list(c(0, "#ffcdd2"), c(1, custom_colors$success)),
+          showscale = TRUE,
+          colorbar = list(title = "Survival Rate (%)")
+        ),
+        text = ~species,
+        hovertemplate = "Species: %{text}<br>Planted: %{x}<br>Survived: %{y}<br>Survival Rate: %{marker.color:.1f}%<extra></extra>") %>%
+  layout(
+    title = "Trees Planted vs Trees Survived",
+    xaxis = list(title = "Trees Planted"),
+    yaxis = list(title = "Trees Survived"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    shapes = list(
+      list(
+        type = "line",
+        x0 = 0, x1 = max(species_data$planted),
+        y0 = 0, y1 = max(species_data$planted),
+        line = list(color = "gray", dash = "dash", width = 2)
+      )
+    ),
+    annotations = list(
+      list(
+        x = max(species_data$planted) * 0.8,
+        y = max(species_data$planted) * 0.9,
+        text = "Perfect Survival (100%)",
+        showarrow = FALSE,
+        font = list(color = "gray")
+      )
+    )
+  )
+
+p2
+```
+:::
+
+## 🏆 Top and Bottom Performers
+
+::: {.plot-container}
+```{r top_bottom_performers}
+#| echo: false
+
+# Get top 5 and bottom 5 performers
+top_performers <- species_data %>%
+  top_n(5, survival_rate) %>%
+  mutate(category = "Top 5")
+
+bottom_performers <- species_data %>%
+  top_n(-5, survival_rate) %>%
+  mutate(category = "Bottom 5")
+
+performers_data <- bind_rows(top_performers, bottom_performers)
+
+p3 <- plot_ly(performers_data, 
+        x = ~reorder(species, survival_rate), 
+        y = ~survival_rate,
+        color = ~category,
+        colors = c("Top 5" = custom_colors$success, "Bottom 5" = custom_colors$danger),
+        type = 'bar',
+        hovertemplate = "Species: %{x}<br>Survival Rate: %{y:.1f}%<br>Category: %{fullData.name}<extra></extra>") %>%
+  layout(
+    title = "Top 5 vs Bottom 5 Performing Species",
+    xaxis = list(title = "Species", tickangle = -45),
+    yaxis = list(title = "Survival Rate (%)", range = c(0, 100)),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    legend = list(orientation = 'h', y = 1.1, x = 0.5, xanchor = 'center'),
+    margin = list(b = 120)
+  )
+
+p3
+```
+:::
+
+## 🌍 Species Distribution Analysis
+
+::: {.plot-container}
+```{r species_distribution}
+#| echo: false
+
+# Pie chart of planted trees by species
+p4 <- plot_ly(species_data, 
+        labels = ~species, 
+        values = ~planted, 
+        type = 'pie',
+        textposition = 'inside',
+        textinfo = 'label+percent',
+        hovertemplate = "Species: %{label}<br>Trees Planted: %{value}<br>Percentage: %{percent}<extra></extra>",
+        marker = list(
+          colors = custom_colors$gradient,
+          line = list(color = '#FFFFFF', width = 2)
+        )) %>%
+  layout(
+    title = "Distribution of Planted Trees by Species",
+    paper_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p4
+```
+:::
+
+## 📊 Survival Rate Categories
+
+::: {.plot-container}
+```{r survival_categories}
+#| echo: false
+
+# Categorize species by survival rate
+species_categories <- species_data %>%
+  mutate(
+    category = case_when(
+      survival_rate >= 80 ~ "Excellent (≥80%)",
+      survival_rate >= 60 ~ "Good (60-79%)",
+      survival_rate >= 40 ~ "Fair (40-59%)",
+      TRUE ~ "Poor (<40%)"
+    )
+  ) %>%
+  count(category) %>%
+  mutate(
+    category = factor(category, levels = c("Excellent (≥80%)", "Good (60-79%)", "Fair (40-59%)", "Poor (<40%)"))
+  )
+
+p5 <- plot_ly(species_categories, 
+        x = ~category, 
+        y = ~n, 
+        type = 'bar',
+        marker = list(
+          color = c(custom_colors$success, custom_colors$warning, "#ff9800", custom_colors$danger)
+        ),
+        hovertemplate = "Category: %{x}<br>Number of Species: %{y}<extra></extra>") %>%
+  layout(
+    title = "Number of Species by Survival Rate Category",
+    xaxis = list(title = "Survival Rate Category"),
+    yaxis = list(title = "Number of Species"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p5
+```
+:::

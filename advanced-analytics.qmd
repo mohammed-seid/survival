@@ -1,0 +1,512 @@
+---
+title: "Advanced Analytics"
+format: 
+  html:
+    page-layout: full
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(plotly)
+library(reactable)
+library(DT)
+library(htmlwidgets)
+library(crosstalk)
+library(zoo)
+library(tibble)
+library(htmltools)
+
+# Custom color palette
+custom_colors <- list(
+  primary = "#2E8B57",
+  secondary = "#20B2AA", 
+  success = "#28a745",
+  warning = "#ffc107",
+  danger = "#dc3545",
+  info = "#17a2b8",
+  light = "#f8f9fa",
+  dark = "#343a40",
+  gradient = c("#2E8B57", "#20B2AA", "#66CDAA", "#98FB98", "#90EE90")
+)
+
+# Helper functions
+format_percent <- function(x, digits = 1) {
+  paste0(round(x * 100, digits), "%")
+}
+
+format_number <- function(x, digits = 0) {
+  format(round(x, digits), big.mark = ",", scientific = FALSE)
+}
+
+# Load and process data
+df_raw <- readRDS("myapp/df.rds")
+
+df_processed <- df_raw %>%
+  mutate(across(everything(), ~ na_if(., "---"))) %>%
+  mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
+  mutate(
+    completed_time = ymd_hms(completed_time),
+    started_time = ymd_hms(started_time)
+  ) %>%
+  mutate(
+    date = as.Date(completed_time),
+    week = floor_date(date, "week"),
+    month = floor_date(date, "month"),
+    hour_started = hour(started_time),
+    day_of_week = wday(date, label = TRUE, week_start = 1),
+    is_weekend = day_of_week %in% c("Sat", "Sun"),
+    duration_minutes = as.numeric(difftime(completed_time, started_time, units = "mins")),
+    is_night_survey = hour_started >= 19 | hour_started < 6,
+    is_short_survey = duration_minutes <= 5,
+    is_long_survey = duration_minutes >= 60
+  ) %>%
+  mutate(across(c(starts_with("ps_num_planted_"), starts_with("num_surv_")), as.numeric))
+
+df_completed <- df_processed %>% filter(consent == 1)
+```
+
+## 📊 Advanced Analytics Dashboard
+
+### Survey Completion Funnel Analysis
+
+::: {.plot-container}
+```{r funnel_analysis}
+#| echo: false
+
+# Create funnel data
+funnel_data <- data.frame(
+  stage = c("Total Attempts", "Consented", "Completed", "Quality Surveys"),
+  value = c(
+    nrow(df_processed),
+    sum(df_processed$consent == 1, na.rm = TRUE),
+    nrow(df_completed),
+    sum(!df_completed$is_short_survey & !df_completed$is_night_survey, na.rm = TRUE)
+  )
+) %>%
+  mutate(
+    percentage = round((value / value[1]) * 100, 1),
+    drop_rate = c(0, round((lag(value) - value) / lag(value) * 100, 1)[-1])
+  )
+
+p1 <- plot_ly(funnel_data, 
+        type = 'funnel',
+        y = ~stage, 
+        x = ~value,
+        textposition = "inside", 
+        textinfo = "value+percent initial",
+        marker = list(
+          color = c(custom_colors$primary, custom_colors$secondary, custom_colors$success, custom_colors$info)
+        ),
+        hovertemplate = "Stage: %{y}<br>Count: %{x}<br>Percentage: %{customdata}%<extra></extra>",
+        customdata = ~percentage) %>%
+  layout(
+    title = "Survey Completion Funnel",
+    paper_bgcolor = "transparent",
+    font = list(color = custom_colors$dark)
+  )
+
+p1
+```
+:::
+
+### Survey Duration Distribution Analysis
+
+::: {.plot-container}
+```{r duration_distribution}
+#| echo: false
+
+# Duration analysis with multiple views
+mean_duration <- mean(df_completed$duration_minutes, na.rm = TRUE)
+median_duration <- median(df_completed$duration_minutes, na.rm = TRUE)
+
+p2 <- plot_ly(df_completed, x = ~duration_minutes, type = 'histogram',
+        nbinsx = 50,
+        marker = list(color = custom_colors$secondary, opacity = 0.7),
+        hovertemplate = "Duration: %{x} min<br>Count: %{y}<extra></extra>") %>%
+  layout(
+    title = "Survey Duration Distribution with Statistical Markers",
+    xaxis = list(title = "Duration (minutes)"),
+    yaxis = list(title = "Frequency"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    shapes = list(
+      list(
+        type = "line",
+        x0 = mean_duration, x1 = mean_duration,
+        y0 = 0, y1 = 1,
+        yref = "paper",
+        line = list(color = custom_colors$danger, dash = "dash", width = 2)
+      ),
+      list(
+        type = "line", 
+        x0 = median_duration, x1 = median_duration,
+        y0 = 0, y1 = 1,
+        yref = "paper",
+        line = list(color = custom_colors$success, dash = "dash", width = 2)
+      )
+    ),
+    annotations = list(
+      list(
+        x = mean_duration,
+        y = 0.9,
+        yref = "paper",
+        text = paste("Mean:", round(mean_duration, 1), "min"),
+        showarrow = TRUE,
+        arrowcolor = custom_colors$danger
+      ),
+      list(
+        x = median_duration,
+        y = 0.8,
+        yref = "paper", 
+        text = paste("Median:", round(median_duration, 1), "min"),
+        showarrow = TRUE,
+        arrowcolor = custom_colors$success
+      )
+    )
+  )
+
+p2
+```
+:::
+
+### Weekly Performance Trends with Forecasting
+
+::: {.plot-container}
+```{r weekly_trends_advanced}
+#| echo: false
+
+# Weekly trends with moving average
+weekly_data <- df_completed %>%
+  group_by(week) %>%
+  summarise(
+    surveys = n(),
+    avg_duration = mean(duration_minutes, na.rm = TRUE),
+    quality_rate = mean(!is_short_survey & !is_night_survey, na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  arrange(week) %>%
+  mutate(
+    surveys_ma = zoo::rollmean(surveys, k = 3, fill = NA, align = "right"),
+    duration_ma = zoo::rollmean(avg_duration, k = 3, fill = NA, align = "right")
+  )
+
+p3 <- plot_ly(weekly_data, x = ~week, y = ~surveys, type = 'scatter', mode = 'lines+markers',
+        name = 'Weekly Surveys',
+        line = list(color = custom_colors$primary, width = 2), 
+        marker = list(color = custom_colors$primary, size = 6),
+        hovertemplate = "Week: %{x}<br>Surveys: %{y}<extra></extra>") %>%
+  add_trace(y = ~surveys_ma, name = '3-Week Moving Average',
+            line = list(color = custom_colors$danger, width = 3, dash = 'dash'),
+            hovertemplate = "Week: %{x}<br>3-Week MA: %{y:.1f}<extra></extra>") %>%
+  layout(
+    title = "Weekly Survey Trends with Moving Average",
+    xaxis = list(title = "Week"),
+    yaxis = list(title = "Number of Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    legend = list(orientation = 'h', y = 1.1, x = 0.5, xanchor = 'center')
+  )
+
+p3
+```
+:::
+
+### Correlation Analysis
+
+::: {.plot-container}
+```{r correlation_analysis}
+#| echo: false
+
+# Correlation matrix of key metrics
+correlation_data <- df_completed %>%
+  select(
+    duration_minutes, hh_size, age, hour_started
+  ) %>%
+  filter(complete.cases(.)) %>%
+  mutate(across(everything(), as.numeric)) %>%
+  cor()
+
+# Convert correlation matrix to long format for heatmap
+cor_long <- correlation_data %>%
+  as.data.frame() %>%
+  rownames_to_column("var1") %>%
+  pivot_longer(-var1, names_to = "var2", values_to = "correlation")
+
+p4 <- plot_ly(
+  data = cor_long,
+  x = ~var1, y = ~var2, z = ~correlation,
+  type = "heatmap",
+  colorscale = list(c(-1, "#dc3545"), c(0, "#f8f9fa"), c(1, "#28a745")),
+  hovertemplate = "Variable 1: %{x}<br>Variable 2: %{y}<br>Correlation: %{z:.3f}<extra></extra>",
+  showscale = TRUE,
+  colorbar = list(title = "Correlation")
+) %>% 
+layout(
+  title = "Correlation Matrix of Key Variables",
+  xaxis = list(title = "Variables"),
+  yaxis = list(title = "Variables"),
+  paper_bgcolor = "transparent"
+)
+
+p4
+```
+:::
+
+### Time Series Decomposition
+
+::: {.plot-container}
+```{r time_series_decomposition}
+#| echo: false
+
+# Daily survey counts with trend analysis
+daily_data <- df_completed %>%
+  group_by(date) %>%
+  summarise(surveys = n(), .groups = "drop") %>%
+  arrange(date) %>%
+  mutate(
+    day_number = as.numeric(date - min(date)) + 1,
+    trend = predict(loess(surveys ~ day_number, span = 0.3)),
+    residual = surveys - trend
+  )
+
+# Create individual plots and combine
+p5_original <- plot_ly(daily_data, x = ~date, y = ~surveys, type = 'scatter', mode = 'lines',
+        name = 'Daily Surveys', line = list(color = custom_colors$primary),
+        hovertemplate = "Date: %{x}<br>Surveys: %{y}<extra></extra>") %>%
+  layout(
+    title = "Daily Survey Count",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "Surveys"),
+    paper_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p5_trend <- plot_ly(daily_data, x = ~date, y = ~trend, type = 'scatter', mode = 'lines',
+        name = 'Trend', line = list(color = custom_colors$danger, width = 3),
+        hovertemplate = "Date: %{x}<br>Trend: %{y:.1f}<extra></extra>") %>%
+  layout(
+    title = "Trend Component",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "Trend"),
+    paper_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p5_residual <- plot_ly(daily_data, x = ~date, y = ~residual, type = 'scatter', mode = 'lines',
+        name = 'Residuals', line = list(color = custom_colors$secondary),
+        hovertemplate = "Date: %{x}<br>Residual: %{y:.1f}<extra></extra>") %>%
+  layout(
+    title = "Residuals",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "Residuals"),
+    paper_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+# Display the original plot (main one)
+p5 <- p5_original
+
+p5
+```
+:::
+
+### Performance Clustering Analysis
+
+::: {.plot-container}
+```{r clustering_analysis}
+#| echo: false
+
+# Enumerator performance clustering
+enum_performance <- df_completed %>%
+  group_by(username) %>%
+  summarise(
+    total_surveys = n(),
+    avg_duration = mean(duration_minutes, na.rm = TRUE),
+    quality_score = mean(!is_short_survey & !is_night_survey, na.rm = TRUE) * 100,
+    .groups = "drop"
+  ) %>%
+  filter(total_surveys >= 5) # Only include enumerators with at least 5 surveys
+
+# Simple clustering based on performance metrics
+set.seed(123)
+if(nrow(enum_performance) > 3) {
+  cluster_data <- enum_performance %>%
+    select(total_surveys, avg_duration, quality_score) %>%
+    scale()
+  
+  clusters <- kmeans(cluster_data, centers = 3)
+  enum_performance$cluster <- as.factor(clusters$cluster)
+  
+  cluster_colors <- c("1" = custom_colors$success, "2" = custom_colors$warning, "3" = custom_colors$danger)
+  
+  p6 <- plot_ly(enum_performance, 
+          x = ~total_surveys, 
+          y = ~avg_duration, 
+          z = ~quality_score,
+          color = ~cluster,
+          colors = cluster_colors,
+          type = 'scatter3d',
+          mode = 'markers',
+          marker = list(size = 8),
+          text = ~username,
+          hovertemplate = "Enumerator: %{text}<br>Surveys: %{x}<br>Avg Duration: %{y:.1f} min<br>Quality Score: %{z:.1f}%<br>Cluster: %{fullData.name}<extra></extra>") %>%
+    layout(
+      title = "Enumerator Performance Clustering (3D)",
+      scene = list(
+        xaxis = list(title = "Total Surveys"),
+        yaxis = list(title = "Average Duration (min)"),
+        zaxis = list(title = "Quality Score (%)")
+      ),
+      paper_bgcolor = "transparent"
+    )
+  
+  p6
+} else {
+  # Fallback 2D plot if not enough data for clustering
+  p6 <- plot_ly(enum_performance, 
+          x = ~total_surveys, 
+          y = ~avg_duration,
+          type = 'scatter',
+          mode = 'markers',
+          marker = list(size = 10, color = custom_colors$primary),
+          text = ~username,
+          hovertemplate = "Enumerator: %{text}<br>Surveys: %{x}<br>Avg Duration: %{y:.1f} min<extra></extra>") %>%
+    layout(
+      title = "Enumerator Performance Distribution",
+      xaxis = list(title = "Total Surveys"),
+      yaxis = list(title = "Average Duration (min)"),
+      paper_bgcolor = "transparent"
+    )
+  
+  p6
+}
+```
+:::
+
+### Predictive Analytics - Survey Duration
+
+::: {.plot-container}
+```{r predictive_analytics}
+#| echo: false
+
+# Simple linear model for duration prediction
+model_data <- df_completed %>%
+  filter(!is.na(hh_size) & !is.na(age) & !is.na(hour_started)) %>%
+  select(duration_minutes, hh_size, age, hour_started)
+
+if(nrow(model_data) > 50) {
+  # Fit simple linear model
+  lm_model <- lm(duration_minutes ~ hh_size + age + hour_started, data = model_data)
+  
+  # Create predictions
+  model_data$predicted <- predict(lm_model)
+  model_data$residuals <- residuals(lm_model)
+  
+  # R-squared
+  r_squared <- summary(lm_model)$r.squared
+  
+  p7 <- plot_ly(model_data, 
+          x = ~predicted, 
+          y = ~duration_minutes, 
+          type = 'scatter',
+          mode = 'markers',
+          marker = list(color = custom_colors$secondary, opacity = 0.6),
+          hovertemplate = "Predicted: %{x:.1f} min<br>Actual: %{y:.1f} min<extra></extra>") %>%
+    add_trace(
+      x = c(min(model_data$predicted), max(model_data$predicted)),
+      y = c(min(model_data$predicted), max(model_data$predicted)),
+      type = 'scatter',
+      mode = 'lines',
+      line = list(color = custom_colors$danger, dash = "dash"),
+      name = "Perfect Prediction",
+      hovertemplate = "Perfect Prediction Line<extra></extra>"
+    ) %>%
+    layout(
+      title = paste("Duration Prediction Model (R² =", round(r_squared, 3), ")"),
+      xaxis = list(title = "Predicted Duration (min)"),
+      yaxis = list(title = "Actual Duration (min)"),
+      paper_bgcolor = "transparent",
+      showlegend = TRUE
+    )
+  
+  p7
+} else {
+  # Fallback message if not enough data
+  p7 <- plot_ly() %>%
+    add_annotations(
+      text = "Insufficient data for predictive modeling",
+      x = 0.5, y = 0.5,
+      xref = "paper", yref = "paper",
+      showarrow = FALSE,
+      font = list(size = 16, color = custom_colors$dark)
+    ) %>%
+    layout(
+      title = "Predictive Analytics - Survey Duration",
+      paper_bgcolor = "transparent"
+    )
+  
+  p7
+}
+```
+:::
+
+## 📊 Statistical Summary
+
+::: {.table-container}
+```{r statistical_summary}
+#| echo: false
+
+# Comprehensive statistical summary
+stats_summary <- df_completed %>%
+  summarise(
+    `Total Surveys` = n(),
+    `Mean Duration (min)` = round(mean(duration_minutes, na.rm = TRUE), 2),
+    `Median Duration (min)` = round(median(duration_minutes, na.rm = TRUE), 2),
+    `Std Dev Duration` = round(sd(duration_minutes, na.rm = TRUE), 2),
+    `Min Duration (min)` = round(min(duration_minutes, na.rm = TRUE), 2),
+    `Max Duration (min)` = round(max(duration_minutes, na.rm = TRUE), 2),
+    `Short Survey Rate (%)` = round(mean(is_short_survey, na.rm = TRUE) * 100, 2),
+    `Night Survey Rate (%)` = round(mean(is_night_survey, na.rm = TRUE) * 100, 2),
+    `Weekend Survey Rate (%)` = round(mean(is_weekend, na.rm = TRUE) * 100, 2),
+    `Mean HH Size` = round(mean(hh_size, na.rm = TRUE), 2),
+    `Mean Age` = round(mean(age, na.rm = TRUE), 2)
+  ) %>%
+  pivot_longer(everything(), names_to = "Metric", values_to = "Value")
+
+reactable(
+  stats_summary,
+  columns = list(
+    Metric = colDef(
+      name = "Statistical Metric",
+      minWidth = 200,
+      cell = function(value) {
+        div(style = "font-weight: bold; color: #2E8B57;", value)
+      }
+    ),
+    Value = colDef(
+      name = "Value",
+      align = "center",
+      cell = function(value) {
+        div(style = "font-weight: bold;", value)
+      }
+    )
+  ),
+  highlight = TRUE,
+  bordered = TRUE,
+  striped = TRUE,
+  theme = reactableTheme(
+    headerStyle = list(backgroundColor = "#f8f9fa", fontWeight = "bold"),
+    cellStyle = list(fontSize = "0.9em")
+  )
+)
+```
+:::

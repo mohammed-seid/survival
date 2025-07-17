@@ -1,0 +1,444 @@
+---
+title: "Data Explorer"
+format: 
+  html:
+    page-layout: full
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(plotly)
+library(reactable)
+library(DT)
+library(htmlwidgets)
+library(crosstalk)
+library(htmltools)
+
+# Custom color palette
+custom_colors <- list(
+  primary = "#2E8B57",
+  secondary = "#20B2AA", 
+  success = "#28a745",
+  warning = "#ffc107",
+  danger = "#dc3545",
+  info = "#17a2b8",
+  light = "#f8f9fa",
+  dark = "#343a40",
+  gradient = c("#2E8B57", "#20B2AA", "#66CDAA", "#98FB98", "#90EE90")
+)
+
+# Helper functions
+format_percent <- function(x, digits = 1) {
+  paste0(round(x * 100, digits), "%")
+}
+
+format_number <- function(x, digits = 0) {
+  format(round(x, digits), big.mark = ",", scientific = FALSE)
+}
+
+# Load and process data
+df_raw <- readRDS("myapp/df.rds")
+
+df_processed <- df_raw %>%
+  mutate(across(everything(), ~ na_if(., "---"))) %>%
+  mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
+  mutate(
+    completed_time = ymd_hms(completed_time),
+    started_time = ymd_hms(started_time)
+  ) %>%
+  mutate(
+    date = as.Date(completed_time),
+    week = floor_date(date, "week"),
+    month = floor_date(date, "month"),
+    hour_started = hour(started_time),
+    day_of_week = wday(date, label = TRUE, week_start = 1),
+    is_weekend = day_of_week %in% c("Sat", "Sun"),
+    duration_minutes = as.numeric(difftime(completed_time, started_time, units = "mins")),
+    is_night_survey = hour_started >= 19 | hour_started < 6,
+    is_short_survey = duration_minutes <= 5,
+    is_long_survey = duration_minutes >= 60
+  ) %>%
+  mutate(across(c(starts_with("ps_num_planted_"), starts_with("num_surv_")), as.numeric))
+
+df_completed <- df_processed %>% filter(consent == 1)
+
+# Prepare data for exploration
+explorer_data <- df_completed %>%
+  select(
+    Date = date,
+    Enumerator = username,
+    Site = site,
+    Woreda = woreda,
+    `Duration (min)` = duration_minutes,
+    `HH Size` = hh_size,
+    Education = education_level,
+    Age = age,
+    Sex = sex,
+    `Day of Week` = day_of_week,
+    `Hour Started` = hour_started,
+    `Is Weekend` = is_weekend,
+    `Is Night Survey` = is_night_survey,
+    `Is Short Survey` = is_short_survey
+  ) %>%
+  arrange(desc(Date))
+
+# Create shared data for crosstalk
+shared_explorer_data <- SharedData$new(explorer_data)
+```
+
+::: {.filter-section}
+## 🔍 Advanced Data Filters
+
+::: {.interactive-controls}
+```{r explorer_filters}
+#| echo: false
+
+# Date filter
+filter_slider("Date", "Date Range", shared_explorer_data, ~Date, step = 1)
+
+# Site filter
+filter_select("Site", "Site", shared_explorer_data, ~Site, multiple = TRUE)
+
+# Woreda filter
+filter_select("Woreda", "Woreda", shared_explorer_data, ~Woreda, multiple = TRUE)
+
+# Enumerator filter
+filter_select("Enumerator", "Enumerator", shared_explorer_data, ~Enumerator, multiple = TRUE)
+
+# Duration filter
+filter_slider("Duration (min)", "Duration (minutes)", shared_explorer_data, ~`Duration (min)`)
+
+# Education filter
+filter_select("Education", "Education Level", shared_explorer_data, ~Education, multiple = TRUE)
+
+# Sex filter
+filter_select("Sex", "Sex", shared_explorer_data, ~Sex, multiple = TRUE)
+
+# Day of week filter
+filter_select("Day of Week", "Day of Week", shared_explorer_data, ~`Day of Week`, multiple = TRUE)
+
+# Boolean filters
+filter_checkbox("Is Weekend", "Weekend Surveys", shared_explorer_data, ~`Is Weekend`)
+filter_checkbox("Is Night Survey", "Night Surveys", shared_explorer_data, ~`Is Night Survey`)
+filter_checkbox("Is Short Survey", "Short Surveys (<5min)", shared_explorer_data, ~`Is Short Survey`)
+```
+:::
+:::
+
+## 📊 Filtered Data Summary
+
+::: {.dashboard-grid}
+::: {.metric-card}
+::: {.metric-label}
+Filtered Records
+:::
+::: {.metric-value id="filtered-count"}
+Loading...
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Unique Sites
+:::
+::: {.metric-value id="unique-sites"}
+Loading...
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Unique Enumerators
+:::
+::: {.metric-value id="unique-enumerators"}
+Loading...
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Average Duration
+:::
+::: {.metric-value id="avg-duration"}
+Loading...
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Date Range
+:::
+::: {.metric-value id="date-range"}
+Loading...
+:::
+:::
+:::
+
+## 🔍 Interactive Data Table
+
+::: {.table-container}
+```{r explorer_table}
+#| echo: false
+
+# Create enhanced interactive table
+DT::datatable(
+  shared_explorer_data,
+  options = list(
+    pageLength = 15,
+    scrollX = TRUE,
+    scrollY = "500px",
+    dom = 'Bfrtip',
+    buttons = list(
+      'copy',
+      list(extend = 'csv', filename = 'survival_survey_data'),
+      list(extend = 'excel', filename = 'survival_survey_data'),
+      list(extend = 'pdf', filename = 'survival_survey_data')
+    ),
+    columnDefs = list(
+      list(className = 'dt-center', targets = c(4, 5, 6, 7, 10, 11, 12, 13, 14, 15))
+    )
+  ),
+  extensions = c('Buttons', 'Scroller'),
+  filter = 'top',
+  rownames = FALSE,
+  class = 'cell-border stripe hover'
+) %>%
+  DT::formatRound(columns = c("Duration (min)"), digits = 1) %>%
+  DT::formatDate(columns = "Date", method = "toLocaleDateString") %>%
+  DT::formatStyle(
+    "Duration (min)",
+    backgroundColor = DT::styleInterval(c(5, 30, 60), c("#ffebee", "#fff8e1", "#e8f5e8", "#ffebee"))
+  ) %>%
+  DT::formatStyle(
+    "Is Short Survey",
+    backgroundColor = DT::styleEqual(TRUE, "#ffebee")
+  ) %>%
+  DT::formatStyle(
+    "Is Night Survey", 
+    backgroundColor = DT::styleEqual(TRUE, "#fff8e1")
+  ) %>%
+  DT::formatStyle(
+    "Is Weekend",
+    backgroundColor = DT::styleEqual(TRUE, "#e3f2fd")
+  )
+```
+:::
+
+## 📈 Dynamic Visualizations
+
+### Survey Distribution by Selected Filters
+
+::: {.plot-container}
+```{r dynamic_plots}
+#| echo: false
+
+# Time series plot
+p1 <- plot_ly(shared_explorer_data, 
+        x = ~Date, 
+        type = 'histogram',
+        marker = list(color = custom_colors$primary),
+        hovertemplate = "Date: %{x}<br>Count: %{y}<extra></extra>") %>%
+  layout(
+    title = "Survey Distribution Over Time",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "Number of Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p1
+```
+:::
+
+### Duration Analysis
+
+::: {.plot-container}
+```{r duration_analysis}
+#| echo: false
+
+# Duration histogram
+p2 <- plot_ly(shared_explorer_data, 
+        x = ~`Duration (min)`, 
+        type = 'histogram',
+        nbinsx = 30,
+        marker = list(color = custom_colors$secondary),
+        hovertemplate = "Duration: %{x} min<br>Count: %{y}<extra></extra>") %>%
+  layout(
+    title = "Survey Duration Distribution",
+    xaxis = list(title = "Duration (minutes)"),
+    yaxis = list(title = "Frequency"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p2
+```
+:::
+
+### Site and Enumerator Distribution
+
+::: {.plot-container}
+```{r site_enum_distribution}
+#| echo: false
+
+# Site distribution
+site_counts <- df_completed %>%
+  count(site, sort = TRUE) %>%
+  head(15)
+
+p3 <- plot_ly(site_counts, 
+        x = ~reorder(site, -n), 
+        y = ~n, 
+        type = 'bar',
+        marker = list(color = custom_colors$gradient[3]),
+        hovertemplate = "Site: %{x}<br>Surveys: %{y}<extra></extra>") %>%
+  layout(
+    title = "Top 15 Sites by Survey Count",
+    xaxis = list(title = "Site", tickangle = -45),
+    yaxis = list(title = "Number of Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    margin = list(b = 120)
+  )
+
+p3
+```
+:::
+
+### Demographic Analysis
+
+::: {.plot-container}
+```{r demographic_analysis}
+#| echo: false
+
+# Education level distribution
+education_counts <- df_completed %>%
+  filter(!is.na(education_level)) %>%
+  count(education_level, sort = TRUE)
+
+p4 <- plot_ly(education_counts, 
+        labels = ~education_level, 
+        values = ~n, 
+        type = 'pie',
+        textposition = 'inside',
+        textinfo = 'label+percent',
+        hovertemplate = "Education: %{label}<br>Count: %{value}<br>Percentage: %{percent}<extra></extra>",
+        marker = list(
+          colors = custom_colors$gradient,
+          line = list(color = '#FFFFFF', width = 2)
+        )) %>%
+  layout(
+    title = "Education Level Distribution",
+    paper_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p4
+```
+:::
+
+### Survey Quality Metrics
+
+::: {.plot-container}
+```{r quality_metrics}
+#| echo: false
+
+# Quality metrics by day of week
+quality_by_day <- df_completed %>%
+  group_by(day_of_week) %>%
+  summarise(
+    total_surveys = n(),
+    short_surveys = sum(is_short_survey, na.rm = TRUE),
+    night_surveys = sum(is_night_survey, na.rm = TRUE),
+    avg_duration = mean(duration_minutes, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    short_rate = (short_surveys / total_surveys) * 100,
+    night_rate = (night_surveys / total_surveys) * 100
+  )
+
+p5 <- plot_ly(quality_by_day, x = ~day_of_week, y = ~short_rate, 
+        type = 'bar', name = 'Short Survey Rate (%)',
+        marker = list(color = custom_colors$danger),
+        hovertemplate = "Day: %{x}<br>Short Survey Rate: %{y:.1f}%<extra></extra>") %>%
+  add_trace(y = ~night_rate, name = 'Night Survey Rate (%)',
+            marker = list(color = custom_colors$warning),
+            hovertemplate = "Day: %{x}<br>Night Survey Rate: %{y:.1f}%<extra></extra>") %>%
+  layout(
+    title = "Survey Quality Metrics by Day of Week",
+    xaxis = list(title = "Day of Week"),
+    yaxis = list(title = "Rate (%)"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    barmode = 'group',
+    legend = list(orientation = 'h', y = 1.1, x = 0.5, xanchor = 'center')
+  )
+
+p5
+```
+:::
+
+## 📊 Cross-tabulation Analysis
+
+::: {.table-container}
+```{r crosstab_analysis}
+#| echo: false
+
+# Create cross-tabulation of Site vs Education Level
+crosstab_data <- df_completed %>%
+  filter(!is.na(education_level) & !is.na(site)) %>%
+  count(site, education_level) %>%
+  pivot_wider(names_from = education_level, values_from = n, values_fill = 0) %>%
+  arrange(desc(rowSums(select(., -site))))
+
+reactable(
+  crosstab_data,
+  columns = list(
+    site = colDef(
+      name = "Site", 
+      minWidth = 150,
+      cell = function(value) {
+        div(style = "font-weight: bold; color: #2E8B57;", value)
+      }
+    )
+  ),
+  defaultPageSize = 10,
+  searchable = TRUE,
+  highlight = TRUE,
+  bordered = TRUE,
+  striped = TRUE,
+  theme = reactableTheme(
+    headerStyle = list(backgroundColor = "#f8f9fa", fontWeight = "bold"),
+    cellStyle = list(fontSize = "0.9em")
+  )
+)
+```
+:::
+
+<script>
+// Update summary statistics based on filtered data
+function updateSummaryStats() {
+  // This would be updated by crosstalk when filters change
+  // For now, showing static values
+  document.getElementById('filtered-count').textContent = '${nrow(explorer_data)}';
+  document.getElementById('unique-sites').textContent = '${n_distinct(explorer_data$Site)}';
+  document.getElementById('unique-enumerators').textContent = '${n_distinct(explorer_data$Enumerator)}';
+  document.getElementById('avg-duration').textContent = '${round(mean(explorer_data$`Duration (min)`, na.rm = TRUE), 1)} min';
+  document.getElementById('date-range').textContent = '${min(explorer_data$Date)} to ${max(explorer_data$Date)}';
+}
+
+// Initialize on page load
+document.addEventListener('DOMContentLoaded', updateSummaryStats);
+</script>

@@ -1,0 +1,54 @@
+project:
+  type: website
+  output-dir: docs
+
+website:
+  title: "Survival Survey Dashboard"
+  description: "Interactive dashboard for analyzing survey data"
+  favicon: "assets/favicon.ico"
+  
+  navbar:
+    title: "🌱 Survival Survey Dashboard"
+    background: "#2E8B57"
+    foreground: white
+    left:
+      - href: index.qmd
+        text: "Executive Summary"
+      - href: enumerator-performance.qmd
+        text: "Enumerator Performance"
+      - href: agricultural-analysis.qmd
+        text: "Agricultural Analysis"
+      - href: site-analysis.qmd
+        text: "Site Analysis"
+      - href: data-explorer.qmd
+        text: "Data Explorer"
+      - href: advanced-analytics.qmd
+        text: "Advanced Analytics"
+    
+    tools:
+      - icon: github
+        href: https://github.com/
+        text: "GitHub"
+
+  sidebar:
+    style: "floating"
+    collapse-level: 2
+
+format:
+  html:
+    theme: 
+      - flatly
+      - custom.scss
+    css: styles.css
+    toc: true
+    toc-location: right
+    code-fold: true
+    code-tools: true
+    grid:
+      sidebar-width: 300px
+      body-width: 1200px
+      margin-width: 200px
+    
+execute:
+  freeze: auto
+  cache: true

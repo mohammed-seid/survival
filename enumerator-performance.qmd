@@ -1,0 +1,412 @@
+---
+title: "Enumerator Performance"
+format: 
+  html:
+    page-layout: full
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(plotly)
+library(reactable)
+library(DT)
+library(htmlwidgets)
+library(crosstalk)
+library(htmltools)
+
+# Custom color palette
+custom_colors <- list(
+  primary = "#2E8B57",
+  secondary = "#20B2AA", 
+  success = "#28a745",
+  warning = "#ffc107",
+  danger = "#dc3545",
+  info = "#17a2b8",
+  light = "#f8f9fa",
+  dark = "#343a40",
+  gradient = c("#2E8B57", "#20B2AA", "#66CDAA", "#98FB98", "#90EE90")
+)
+
+# Helper functions
+format_percent <- function(x, digits = 1) {
+  paste0(round(x * 100, digits), "%")
+}
+
+format_number <- function(x, digits = 0) {
+  format(round(x, digits), big.mark = ",", scientific = FALSE)
+}
+
+# Load and process data
+df_raw <- readRDS("myapp/df.rds")
+
+df_processed <- df_raw %>%
+  mutate(across(everything(), ~ na_if(., "---"))) %>%
+  mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
+  mutate(
+    completed_time = ymd_hms(completed_time),
+    started_time = ymd_hms(started_time)
+  ) %>%
+  mutate(
+    date = as.Date(completed_time),
+    week = floor_date(date, "week"),
+    month = floor_date(date, "month"),
+    hour_started = hour(started_time),
+    day_of_week = wday(date, label = TRUE, week_start = 1),
+    is_weekend = day_of_week %in% c("Sat", "Sun"),
+    duration_minutes = as.numeric(difftime(completed_time, started_time, units = "mins")),
+    is_night_survey = hour_started >= 19 | hour_started < 6,
+    is_short_survey = duration_minutes <= 5,
+    is_long_survey = duration_minutes >= 60
+  ) %>%
+  mutate(across(c(starts_with("ps_num_planted_"), starts_with("num_surv_")), as.numeric))
+
+df_completed <- df_processed %>% filter(consent == 1)
+
+# Enumerator statistics
+enumerator_stats <- df_completed %>%
+  group_by(username) %>%
+  summarise(
+    total_surveys = n(),
+    avg_duration = round(mean(duration_minutes, na.rm = TRUE), 1),
+    short_surveys = sum(is_short_survey, na.rm = TRUE),
+    night_surveys = sum(is_night_survey, na.rm = TRUE),
+    weekend_surveys = sum(is_weekend, na.rm = TRUE),
+    completion_rate = round(n() / nrow(df_completed) * 100, 1),
+    .groups = "drop"
+  ) %>%
+  arrange(desc(total_surveys))
+
+# Create shared data for crosstalk
+shared_enum_data <- SharedData$new(enumerator_stats)
+```
+
+::: {.filter-section}
+## 🔍 Performance Filters
+
+::: {.interactive-controls}
+```{r enum_filters}
+#| echo: false
+
+# Enumerator filter
+filter_select("username", "Enumerator", shared_enum_data, ~username, multiple = TRUE)
+
+# Survey count filter
+filter_slider("total_surveys", "Total Surveys", shared_enum_data, ~total_surveys)
+
+# Duration filter
+filter_slider("avg_duration", "Average Duration (min)", shared_enum_data, ~avg_duration)
+```
+:::
+:::
+
+## 📊 Individual Performance Overview
+
+::: {.table-container}
+```{r enumerator_table}
+#| echo: false
+
+# Enhanced enumerator performance table
+reactable(
+  shared_enum_data,
+  columns = list(
+    username = colDef(
+      name = "Enumerator", 
+      minWidth = 120,
+      cell = function(value) {
+        div(style = "font-weight: bold; color: #2E8B57;", value)
+      }
+    ),
+    total_surveys = colDef(
+      name = "Total Surveys", 
+      align = "center",
+      cell = function(value) {
+        color <- if (value >= 50) "#28a745" else if (value >= 30) "#ffc107" else "#dc3545"
+        div(style = paste("color:", color, "; font-weight: bold;"), value)
+      }
+    ),
+    avg_duration = colDef(
+      name = "Avg Duration (min)", 
+      align = "center",
+      format = colFormat(digits = 1),
+      cell = function(value) {
+        color <- if (value <= 20) "#28a745" else if (value <= 40) "#ffc107" else "#dc3545"
+        div(style = paste("color:", color, "; font-weight: bold;"), paste(value, "min"))
+      }
+    ),
+    short_surveys = colDef(
+      name = "Short Surveys (<5min)", 
+      align = "center",
+      cell = function(value) {
+        if (value > 0) {
+          div(
+            style = "color: #dc3545; font-weight: bold;",
+            span(class = "status-indicator status-danger"),
+            value
+          )
+        } else {
+          div(style = "color: #28a745;", "✓ None")
+        }
+      }
+    ),
+    night_surveys = colDef(
+      name = "Night Surveys", 
+      align = "center",
+      cell = function(value) {
+        if (value > 0) {
+          div(
+            style = "color: #ffc107; font-weight: bold;",
+            span(class = "status-indicator status-warning"),
+            value
+          )
+        } else {
+          div(style = "color: #28a745;", "✓ None")
+        }
+      }
+    ),
+    weekend_surveys = colDef(
+      name = "Weekend Surveys", 
+      align = "center"
+    ),
+    completion_rate = colDef(
+      name = "Share of Total (%)", 
+      align = "center",
+      format = colFormat(suffix = "%", digits = 1)
+    )
+  ),
+  defaultPageSize = 10, 
+  searchable = TRUE, 
+  highlight = TRUE, 
+  bordered = TRUE, 
+  striped = TRUE,
+  theme = reactableTheme(
+    headerStyle = list(backgroundColor = "#f8f9fa", fontWeight = "bold"),
+    cellStyle = list(fontSize = "0.9em")
+  )
+)
+```
+:::
+
+## 🎯 Target vs Actual Performance
+
+::: {.plot-container}
+```{r target_comparison}
+#| echo: false
+
+target_per_enum <- 50
+
+p1 <- plot_ly(enumerator_stats, 
+        x = ~reorder(username, -total_surveys), 
+        y = ~total_surveys, 
+        type = 'bar', 
+        name = "Actual",
+        marker = list(color = custom_colors$primary),
+        hovertemplate = "Enumerator: %{x}<br>Surveys: %{y}<extra></extra>") %>%
+  add_trace(
+    x = ~reorder(username, -total_surveys), 
+    y = target_per_enum, 
+    type = 'scatter', 
+    mode = 'lines', 
+    name = "Target",
+    line = list(color = custom_colors$danger, dash = 'dash', width = 3),
+    hovertemplate = "Target: %{y}<extra></extra>"
+  ) %>%
+  layout(
+    title = "Individual Performance vs Target",
+    xaxis = list(title = "Enumerator", tickangle = -45),
+    yaxis = list(title = "Total Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    legend = list(orientation = 'h', y = 1.1, x = 0.5, xanchor = 'center'),
+    margin = list(b = 100)
+  )
+
+p1
+```
+:::
+
+## 📅 Daily Productivity Heatmap
+
+::: {.plot-container}
+```{r productivity_heatmap}
+#| echo: false
+
+heatmap_data <- df_completed %>%
+  group_by(day_of_week, hour_started) %>%
+  summarise(count = n(), .groups = "drop")
+
+p2 <- plot_ly(
+  data = heatmap_data,
+  x = ~hour_started, 
+  y = ~day_of_week, 
+  z = ~count,
+  type = "heatmap", 
+  colorscale = list(c(0, "#f8f9fa"), c(1, custom_colors$primary)),
+  hovertemplate = "Day: %{y}<br>Hour: %{x}<br>Surveys: %{z}<extra></extra>"
+) %>% 
+layout(
+  title = "Survey Activity by Day and Hour",
+  xaxis = list(title = "Hour of Day"),
+  yaxis = list(
+    title = "Day of Week", 
+    categoryorder = "array", 
+    categoryarray = c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+  ),
+  paper_bgcolor = "transparent"
+)
+
+p2
+```
+:::
+
+## ⚠️ Quality Alerts
+
+::: {.table-container}
+```{r quality_alerts}
+#| echo: false
+
+quality_data <- enumerator_stats %>%
+  filter(short_surveys > 0 | night_surveys > 0) %>%
+  select(
+    Enumerator = username, 
+    `Short Surveys` = short_surveys, 
+    `Night Surveys` = night_surveys,
+    `Total Surveys` = total_surveys,
+    `Avg Duration` = avg_duration
+  ) %>%
+  arrange(desc(`Short Surveys`))
+
+if (nrow(quality_data) > 0) {
+  reactable(
+    quality_data,
+    columns = list(
+      Enumerator = colDef(
+        name = "Enumerator",
+        cell = function(value) {
+          div(style = "font-weight: bold; color: #dc3545;", value)
+        }
+      ),
+      `Short Surveys` = colDef(
+        name = "Short Surveys (<5min)",
+        align = "center",
+        cell = function(value) {
+          if (value > 0) {
+            div(
+              style = "color: #dc3545; font-weight: bold; background-color: #ffebee; padding: 4px; border-radius: 4px;",
+              value
+            )
+          } else {
+            value
+          }
+        }
+      ),
+      `Night Surveys` = colDef(
+        name = "Night Surveys (7PM-6AM)",
+        align = "center",
+        cell = function(value) {
+          if (value > 0) {
+            div(
+              style = "color: #ffc107; font-weight: bold; background-color: #fff8e1; padding: 4px; border-radius: 4px;",
+              value
+            )
+          } else {
+            value
+          }
+        }
+      ),
+      `Total Surveys` = colDef(name = "Total Surveys", align = "center"),
+      `Avg Duration` = colDef(
+        name = "Avg Duration (min)", 
+        align = "center",
+        format = colFormat(digits = 1)
+      )
+    ),
+    defaultPageSize = 8, 
+    highlight = TRUE, 
+    bordered = TRUE, 
+    striped = TRUE,
+    theme = reactableTheme(
+      headerStyle = list(backgroundColor = "#f8f9fa", fontWeight = "bold"),
+      cellStyle = list(fontSize = "0.9em")
+    )
+  )
+} else {
+  div(
+    class = "alert alert-success",
+    style = "text-align: center; padding: 20px; margin: 20px 0;",
+    h4("🎉 No Quality Issues Detected!"),
+    p("All enumerators are performing within acceptable quality parameters.")
+  )
+}
+```
+:::
+
+## 📊 Performance Distribution
+
+::: {.plot-container}
+```{r performance_distribution}
+#| echo: false
+
+# Duration distribution by enumerator
+p3 <- plot_ly(df_completed, 
+        x = ~username, 
+        y = ~duration_minutes, 
+        type = 'box',
+        marker = list(color = custom_colors$secondary),
+        hovertemplate = "Enumerator: %{x}<br>Duration: %{y} min<extra></extra>") %>%
+  layout(
+    title = "Survey Duration Distribution by Enumerator",
+    xaxis = list(title = "Enumerator", tickangle = -45),
+    yaxis = list(title = "Duration (minutes)"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    margin = list(b = 100)
+  )
+
+p3
+```
+:::
+
+## 📈 Daily Performance Trends
+
+::: {.plot-container}
+```{r daily_performance_trends}
+#| echo: false
+
+# Top 5 enumerators by total surveys
+top_enumerators <- enumerator_stats %>%
+  top_n(5, total_surveys) %>%
+  pull(username)
+
+daily_enum_data <- df_completed %>%
+  filter(username %in% top_enumerators) %>%
+  group_by(date, username) %>%
+  summarise(daily_surveys = n(), .groups = "drop")
+
+p4 <- plot_ly(daily_enum_data, 
+        x = ~date, 
+        y = ~daily_surveys, 
+        color = ~username,
+        type = 'scatter', 
+        mode = 'lines+markers',
+        hovertemplate = "Date: %{x}<br>Enumerator: %{fullData.name}<br>Surveys: %{y}<extra></extra>") %>%
+  layout(
+    title = "Daily Performance Trends (Top 5 Enumerators)",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "Daily Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    legend = list(orientation = 'h', y = 1.1, x = 0.5, xanchor = 'center')
+  )
+
+p4
+```
+:::

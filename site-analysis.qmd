@@ -1,0 +1,469 @@
+---
+title: "Site Analysis"
+format: 
+  html:
+    page-layout: full
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(plotly)
+library(reactable)
+library(DT)
+library(htmlwidgets)
+library(crosstalk)
+library(htmltools)
+
+# Custom color palette
+custom_colors <- list(
+  primary = "#2E8B57",
+  secondary = "#20B2AA", 
+  success = "#28a745",
+  warning = "#ffc107",
+  danger = "#dc3545",
+  info = "#17a2b8",
+  light = "#f8f9fa",
+  dark = "#343a40",
+  gradient = c("#2E8B57", "#20B2AA", "#66CDAA", "#98FB98", "#90EE90")
+)
+
+# Helper functions
+format_percent <- function(x, digits = 1) {
+  paste0(round(x * 100, digits), "%")
+}
+
+format_number <- function(x, digits = 0) {
+  format(round(x, digits), big.mark = ",", scientific = FALSE)
+}
+
+# Load and process data
+df_raw <- readRDS("myapp/df.rds")
+
+df_processed <- df_raw %>%
+  mutate(across(everything(), ~ na_if(., "---"))) %>%
+  mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
+  mutate(
+    completed_time = ymd_hms(completed_time),
+    started_time = ymd_hms(started_time)
+  ) %>%
+  mutate(
+    date = as.Date(completed_time),
+    week = floor_date(date, "week"),
+    month = floor_date(date, "month"),
+    hour_started = hour(started_time),
+    day_of_week = wday(date, label = TRUE, week_start = 1),
+    is_weekend = day_of_week %in% c("Sat", "Sun"),
+    duration_minutes = as.numeric(difftime(completed_time, started_time, units = "mins")),
+    is_night_survey = hour_started >= 19 | hour_started < 6,
+    is_short_survey = duration_minutes <= 5,
+    is_long_survey = duration_minutes >= 60
+  ) %>%
+  mutate(across(c(starts_with("ps_num_planted_"), starts_with("num_surv_")), as.numeric))
+
+df_completed <- df_processed %>% filter(consent == 1)
+
+# Site statistics
+site_stats <- df_completed %>%
+  group_by(site) %>%
+  summarise(
+    total_surveys = n(),
+    avg_duration = round(mean(duration_minutes, na.rm = TRUE), 1),
+    completion_rate = round((n() / nrow(df_completed)) * 100, 1),
+    unique_enumerators = n_distinct(username),
+    avg_hh_size = round(mean(hh_size, na.rm = TRUE), 1),
+    total_planted = sum(across(starts_with("ps_num_planted_")), na.rm = TRUE),
+    total_survived = sum(across(starts_with("num_surv_")), na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  mutate(
+    survival_rate = ifelse(total_planted > 0, (total_survived / total_planted) * 100, 0)
+  ) %>%
+  arrange(desc(total_surveys))
+
+# Create shared data for crosstalk
+shared_site_data <- SharedData$new(site_stats)
+```
+
+::: {.filter-section}
+## 🔍 Site Analysis Filters
+
+::: {.interactive-controls}
+```{r site_filters}
+#| echo: false
+
+# Site filter
+filter_select("site", "Site", shared_site_data, ~site, multiple = TRUE)
+
+# Survey count filter
+filter_slider("total_surveys", "Total Surveys", shared_site_data, ~total_surveys)
+
+# Survival rate filter
+filter_slider("survival_rate", "Survival Rate (%)", shared_site_data, ~survival_rate)
+
+# Duration filter
+filter_slider("avg_duration", "Average Duration (min)", shared_site_data, ~avg_duration)
+```
+:::
+:::
+
+## 🏢 Site Performance Overview
+
+::: {.dashboard-grid}
+::: {.metric-card}
+::: {.metric-label}
+Total Sites
+:::
+::: {.metric-value}
+`r nrow(site_stats)`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Most Active Site
+:::
+::: {.metric-value}
+`r site_stats$site[1]`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Best Survival Rate
+:::
+::: {.metric-value}
+`r format_percent(max(site_stats$survival_rate, na.rm = TRUE) / 100)`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Average Duration
+:::
+::: {.metric-value}
+`r round(mean(site_stats$avg_duration, na.rm = TRUE), 1)` min
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Total Enumerators
+:::
+::: {.metric-value}
+`r sum(site_stats$unique_enumerators, na.rm = TRUE)`
+:::
+:::
+:::
+
+## 🏢 Site Performance Comparison
+
+::: {.plot-container}
+```{r site_performance_plot}
+#| echo: false
+
+p1 <- plot_ly(site_stats, 
+        x = ~reorder(site, -total_surveys), 
+        y = ~total_surveys, 
+        type = 'bar', 
+        marker = list(color = custom_colors$gradient[1]),
+        hovertemplate = "Site: %{x}<br>Surveys: %{y}<br>Avg Duration: %{customdata[0]} min<br>Enumerators: %{customdata[1]}<extra></extra>",
+        customdata = ~cbind(avg_duration, unique_enumerators)) %>%
+  layout(
+    title = "Survey Count by Site",
+    xaxis = list(title = "Site", tickangle = -45),
+    yaxis = list(title = "Number of Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    margin = list(b = 120)
+  )
+
+p1
+```
+:::
+
+## 📊 Comprehensive Site Comparison Table
+
+::: {.table-container}
+```{r site_comparison_table}
+#| echo: false
+
+reactable(
+  shared_site_data,
+  columns = list(
+    site = colDef(
+      name = "Site", 
+      minWidth = 150,
+      cell = function(value) {
+        div(style = "font-weight: bold; color: #2E8B57;", value)
+      }
+    ),
+    total_surveys = colDef(
+      name = "Total Surveys", 
+      align = "center", 
+      minWidth = 100,
+      cell = function(value) {
+        color <- if (value >= 100) "#28a745" else if (value >= 50) "#ffc107" else "#dc3545"
+        div(style = paste("color:", color, "; font-weight: bold;"), format(value, big.mark = ","))
+      }
+    ),
+    avg_duration = colDef(
+      name = "Avg Duration (min)", 
+      align = "center",
+      format = colFormat(digits = 1),
+      cell = function(value) {
+        color <- if (value <= 20) "#28a745" else if (value <= 40) "#ffc107" else "#dc3545"
+        div(style = paste("color:", color, "; font-weight: bold;"), paste(value, "min"))
+      }
+    ),
+    completion_rate = colDef(
+      name = "Share of Total (%)", 
+      align = "center",
+      format = colFormat(digits = 1),
+      cell = function(value) {
+        div(style = "font-weight: bold;", paste0(value, "%"))
+      }
+    ),
+    unique_enumerators = colDef(
+      name = "Enumerators", 
+      align = "center"
+    ),
+    avg_hh_size = colDef(
+      name = "Avg HH Size", 
+      align = "center",
+      format = colFormat(digits = 1)
+    ),
+    total_planted = colDef(
+      name = "Trees Planted", 
+      align = "center",
+      format = colFormat(separators = TRUE)
+    ),
+    total_survived = colDef(
+      name = "Trees Survived", 
+      align = "center",
+      format = colFormat(separators = TRUE)
+    ),
+    survival_rate = colDef(
+      name = "Survival Rate (%)",
+      align = "center",
+      format = colFormat(digits = 1),
+      cell = function(value) {
+        color <- if (value >= 80) {
+          "#A5D6A7"
+        } else if (value >= 60) {
+          "#FFF9C4"
+        } else {
+          "#FFCDD2"
+        }
+        div(
+          style = paste("background:", color, "; padding: 4px; border-radius: 4px; font-weight: bold;"),
+          paste0(round(value, 1), "%")
+        )
+      }
+    )
+  ),
+  defaultPageSize = 10, 
+  searchable = TRUE, 
+  highlight = TRUE, 
+  bordered = TRUE, 
+  striped = TRUE,
+  theme = reactableTheme(
+    headerStyle = list(backgroundColor = "#f8f9fa", fontWeight = "bold"),
+    cellStyle = list(fontSize = "0.9em")
+  )
+)
+```
+:::
+
+## 🌱 Tree Survival Rates by Site
+
+::: {.plot-container}
+```{r site_survival_plot}
+#| echo: false
+
+p2 <- plot_ly(site_stats, 
+        x = ~reorder(site, survival_rate), 
+        y = ~survival_rate, 
+        type = 'bar', 
+        marker = list(
+          color = ~survival_rate, 
+          colorscale = list(c(0, "#ffcdd2"), c(1, custom_colors$success)),
+          showscale = TRUE,
+          colorbar = list(title = "Survival Rate (%)")
+        ),
+        hovertemplate = "Site: %{x}<br>Planted: %{customdata[0]}<br>Survived: %{customdata[1]}<br>Rate: %{y:.1f}%<extra></extra>",
+        customdata = ~cbind(total_planted, total_survived)) %>%
+  layout(
+    title = "Tree Survival Rates by Site",
+    xaxis = list(title = "Site", tickangle = -45),
+    yaxis = list(title = "Survival Rate (%)", range = c(0, 100)),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    margin = list(b = 120)
+  )
+
+p2
+```
+:::
+
+## ⏱️ Average Survey Duration by Site
+
+::: {.plot-container}
+```{r site_duration_plot}
+#| echo: false
+
+duration_data <- site_stats %>%
+  arrange(desc(avg_duration))
+
+p3 <- plot_ly(duration_data, 
+        x = ~reorder(site, avg_duration), 
+        y = ~avg_duration, 
+        type = 'bar', 
+        marker = list(color = custom_colors$warning),
+        hovertemplate = "Site: %{x}<br>Avg Duration: %{y} min<br>Total Surveys: %{customdata}<extra></extra>",
+        customdata = ~total_surveys) %>%
+  layout(
+    title = "Average Survey Duration by Site",
+    xaxis = list(title = "Site", tickangle = -45),
+    yaxis = list(title = "Average Duration (minutes)"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    margin = list(b = 120)
+  )
+
+p3
+```
+:::
+
+## 📈 Site Performance Matrix
+
+::: {.plot-container}
+```{r site_performance_matrix}
+#| echo: false
+
+p4 <- plot_ly(site_stats, 
+        x = ~total_surveys, 
+        y = ~survival_rate, 
+        type = 'scatter',
+        mode = 'markers',
+        marker = list(
+          size = ~avg_duration,
+          sizemode = 'diameter',
+          sizeref = 2 * max(site_stats$avg_duration) / (40^2),
+          color = ~unique_enumerators,
+          colorscale = 'Viridis',
+          showscale = TRUE,
+          colorbar = list(title = "Enumerators")
+        ),
+        text = ~site,
+        hovertemplate = "Site: %{text}<br>Surveys: %{x}<br>Survival Rate: %{y:.1f}%<br>Avg Duration: %{marker.size} min<br>Enumerators: %{marker.color}<extra></extra>") %>%
+  layout(
+    title = "Site Performance Matrix (Size = Duration, Color = Enumerators)",
+    xaxis = list(title = "Total Surveys"),
+    yaxis = list(title = "Survival Rate (%)"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent"
+  )
+
+p4
+```
+:::
+
+## 🏆 Site Rankings
+
+::: {.plot-container}
+```{r site_rankings}
+#| echo: false
+
+# Create rankings for different metrics
+site_rankings <- site_stats %>%
+  mutate(
+    survey_rank = rank(-total_surveys),
+    survival_rank = rank(-survival_rate),
+    duration_rank = rank(avg_duration),  # Lower duration is better
+    overall_score = (survey_rank + survival_rank + duration_rank) / 3
+  ) %>%
+  arrange(overall_score) %>%
+  select(site, survey_rank, survival_rank, duration_rank, overall_score) %>%
+  head(10)
+
+# Reshape for plotting
+rankings_long <- site_rankings %>%
+  pivot_longer(cols = c(survey_rank, survival_rank, duration_rank), 
+               names_to = "metric", values_to = "rank") %>%
+  mutate(
+    metric = case_when(
+      metric == "survey_rank" ~ "Survey Count",
+      metric == "survival_rank" ~ "Survival Rate", 
+      metric == "duration_rank" ~ "Duration (Lower=Better)"
+    )
+  )
+
+p5 <- plot_ly(rankings_long, 
+        x = ~metric, 
+        y = ~rank, 
+        color = ~site,
+        type = 'scatter',
+        mode = 'lines+markers',
+        line = list(width = 3),
+        marker = list(size = 8),
+        hovertemplate = "Site: %{fullData.name}<br>Metric: %{x}<br>Rank: %{y}<extra></extra>") %>%
+  layout(
+    title = "Site Rankings Across Key Metrics (Lower Rank = Better Performance)",
+    xaxis = list(title = "Performance Metric"),
+    yaxis = list(title = "Rank", autorange = "reversed"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    legend = list(orientation = 'h', y = 1.15, x = 0.5, xanchor = 'center')
+  )
+
+p5
+```
+:::
+
+## 📊 Site Efficiency Analysis
+
+::: {.plot-container}
+```{r site_efficiency}
+#| echo: false
+
+# Calculate efficiency metrics
+efficiency_data <- site_stats %>%
+  mutate(
+    surveys_per_enumerator = total_surveys / unique_enumerators,
+    trees_per_survey = total_planted / total_surveys,
+    efficiency_score = (surveys_per_enumerator * survival_rate) / avg_duration
+  ) %>%
+  arrange(desc(efficiency_score)) %>%
+  head(10)
+
+p6 <- plot_ly(efficiency_data, 
+        x = ~reorder(site, efficiency_score), 
+        y = ~efficiency_score, 
+        type = 'bar',
+        marker = list(color = custom_colors$info),
+        hovertemplate = "Site: %{x}<br>Efficiency Score: %{y:.2f}<br>Surveys/Enumerator: %{customdata[0]:.1f}<br>Trees/Survey: %{customdata[1]:.1f}<extra></extra>",
+        customdata = ~cbind(surveys_per_enumerator, trees_per_survey)) %>%
+  layout(
+    title = "Site Efficiency Score (Top 10)",
+    xaxis = list(title = "Site", tickangle = -45),
+    yaxis = list(title = "Efficiency Score"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    margin = list(b = 120)
+  )
+
+p6
+```
+:::

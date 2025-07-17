@@ -1,0 +1,303 @@
+---
+title: "Executive Summary"
+format: 
+  html:
+    page-layout: full
+execute:
+  echo: false
+  warning: false
+  message: false
+---
+
+```{r setup}
+#| include: false
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(stringr)
+library(plotly)
+library(reactable)
+library(DT)
+library(htmlwidgets)
+library(crosstalk)
+library(htmltools)
+
+# Custom color palette
+custom_colors <- list(
+  primary = "#2E8B57",
+  secondary = "#20B2AA", 
+  success = "#28a745",
+  warning = "#ffc107",
+  danger = "#dc3545",
+  info = "#17a2b8",
+  light = "#f8f9fa",
+  dark = "#343a40",
+  gradient = c("#2E8B57", "#20B2AA", "#66CDAA", "#98FB98", "#90EE90")
+)
+
+# Helper functions
+format_percent <- function(x, digits = 1) {
+  paste0(round(x * 100, digits), "%")
+}
+
+format_number <- function(x, digits = 0) {
+  format(round(x, digits), big.mark = ",", scientific = FALSE)
+}
+
+# Load and process data
+df_raw <- readRDS("myapp/df.rds")
+
+df_processed <- df_raw %>%
+  mutate(across(everything(), ~ na_if(., "---"))) %>%
+  mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
+  mutate(
+    completed_time = ymd_hms(completed_time),
+    started_time = ymd_hms(started_time)
+  ) %>%
+  mutate(
+    date = as.Date(completed_time),
+    week = floor_date(date, "week"),
+    month = floor_date(date, "month"),
+    hour_started = hour(started_time),
+    day_of_week = wday(date, label = TRUE, week_start = 1),
+    is_weekend = day_of_week %in% c("Sat", "Sun"),
+    duration_minutes = as.numeric(difftime(completed_time, started_time, units = "mins")),
+    is_night_survey = hour_started >= 19 | hour_started < 6,
+    is_short_survey = duration_minutes <= 5,
+    is_long_survey = duration_minutes >= 60
+  ) %>%
+  mutate(across(c(starts_with("ps_num_planted_"), starts_with("num_surv_")), as.numeric))
+
+df_completed <- df_processed %>% filter(consent == 1)
+
+# Create shared data for crosstalk
+shared_data <- SharedData$new(df_completed)
+```
+
+::: {.filter-section}
+## 🔍 Interactive Filters
+
+::: {.interactive-controls}
+```{r filters}
+#| echo: false
+
+# Date range filter
+filter_slider("date", "Date Range", shared_data, ~date, step = 1)
+
+# Site filter  
+filter_select("site", "Site", shared_data, ~site, multiple = TRUE)
+
+# Woreda filter
+filter_select("woreda", "Woreda", shared_data, ~woreda, multiple = TRUE)
+
+# Enumerator filter
+filter_select("username", "Enumerator", shared_data, ~username, multiple = TRUE)
+```
+:::
+:::
+
+## 📊 Key Performance Indicators
+
+::: {.dashboard-grid}
+::: {.metric-card}
+::: {.metric-label}
+Total Surveys
+:::
+::: {.metric-value}
+`r format_number(nrow(df_processed))`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Completed Surveys
+:::
+::: {.metric-value}
+`r format_number(nrow(df_completed))`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Refusal Rate
+:::
+::: {.metric-value}
+`r format_percent(sum(df_processed$consent == 0, na.rm = TRUE) / nrow(df_processed))`
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Avg. Duration
+:::
+::: {.metric-value}
+`r round(mean(df_completed$duration_minutes, na.rm = TRUE), 1)` min
+:::
+:::
+
+::: {.metric-card}
+::: {.metric-label}
+Unique Enumerators
+:::
+::: {.metric-value}
+`r n_distinct(df_completed$username)`
+:::
+:::
+:::
+
+## 📈 Daily Survey Progress
+
+::: {.plot-container}
+```{r daily_progress}
+#| echo: false
+
+daily_data <- df_completed %>%
+  group_by(date) %>%
+  summarise(surveys = n(), .groups = "drop")
+
+p1 <- plot_ly(daily_data, x = ~date, y = ~surveys, type = 'bar',
+        marker = list(color = custom_colors$primary),
+        hovertemplate = "Date: %{x}<br>Surveys: %{y}<extra></extra>") %>%
+  layout(
+    title = "Daily Survey Completion",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "Number of Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p1
+```
+:::
+
+## 🎯 Target Achievement
+
+::: {.plot-container}
+```{r gauge_plot}
+#| echo: false
+
+target <- 3600
+current <- nrow(df_completed)
+percentage <- min(current / target, 1) * 100
+
+gauge_plot <- plot_ly(
+  type = "indicator",
+  mode = "gauge+number+delta",
+  value = current,
+  delta = list(reference = target),
+  gauge = list(
+    axis = list(range = list(NULL, target)),
+    bar = list(color = custom_colors$primary),
+    steps = list(
+      list(range = c(0, target*0.5), color = "lightgray"),
+      list(range = c(target*0.5, target*0.8), color = "gray")
+    ),
+    threshold = list(
+      line = list(color = "red", width = 4),
+      thickness = 0.75,
+      value = target
+    )
+  )
+) %>% 
+layout(
+  title = "Survey Target Progress", 
+  paper_bgcolor = "transparent",
+  font = list(color = custom_colors$dark)
+)
+
+gauge_plot
+```
+:::
+
+## 📊 Interactive Survey Data
+
+::: {.table-container}
+```{r interactive_table}
+#| echo: false
+
+# Create interactive table with crosstalk
+display_data <- df_completed %>%
+  select(
+    Date = date,
+    Enumerator = username,
+    Site = site,
+    Woreda = woreda,
+    `Duration (min)` = duration_minutes,
+    `HH Size` = hh_size,
+    Education = education_level,
+    Age = age,
+    Sex = sex
+  ) %>%
+  arrange(desc(Date))
+
+# Use DT for better interactivity with crosstalk
+DT::datatable(
+  shared_data,
+  options = list(
+    pageLength = 10,
+    scrollX = TRUE,
+    dom = 'Bfrtip',
+    buttons = c('copy', 'csv', 'excel')
+  ),
+  extensions = 'Buttons',
+  filter = 'top',
+  rownames = FALSE
+) %>%
+  DT::formatRound(columns = c("duration_minutes"), digits = 1)
+```
+:::
+
+## 📈 Weekly Trends
+
+::: {.plot-container}
+```{r weekly_trends}
+#| echo: false
+
+weekly_data <- df_completed %>%
+  group_by(week) %>%
+  summarise(surveys = n(), .groups = "drop")
+
+p3 <- plot_ly(weekly_data, x = ~week, y = ~surveys, type = 'scatter', mode = 'lines+markers',
+        line = list(color = custom_colors$primary, width = 3), 
+        marker = list(color = custom_colors$primary, size = 8),
+        hovertemplate = "Week: %{x}<br>Surveys: %{y}<extra></extra>") %>%
+  layout(
+    title = "Weekly Survey Trends",
+    xaxis = list(title = "Week"),
+    yaxis = list(title = "Number of Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE
+  )
+
+p3
+```
+:::
+
+## 🗺️ Geographic Distribution
+
+::: {.plot-container}
+```{r geographic_plot}
+#| echo: false
+
+geo_data <- df_completed %>%
+  group_by(woreda) %>%
+  summarise(count = n(), .groups = "drop")
+
+p4 <- plot_ly(geo_data, x = ~reorder(woreda, -count), y = ~count, 
+        type = 'bar', marker = list(color = custom_colors$secondary),
+        hovertemplate = "Woreda: %{x}<br>Surveys: %{y}<extra></extra>") %>%
+  layout(
+    title = "Surveys by Woreda",
+    xaxis = list(title = "Woreda", tickangle = -45),
+    yaxis = list(title = "Number of Surveys"),
+    paper_bgcolor = "transparent", 
+    plot_bgcolor = "transparent",
+    showlegend = FALSE,
+    margin = list(b = 100)
+  )
+
+p4
+```
+:::

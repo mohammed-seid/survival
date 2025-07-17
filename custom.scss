@@ -1,0 +1,79 @@
+/*-- scss:defaults --*/
+$primary: #2E8B57;
+$secondary: #20B2AA;
+$success: #28a745;
+$warning: #ffc107;
+$danger: #dc3545;
+$info: #17a2b8;
+$light: #f8f9fa;
+$dark: #343a40;
+
+/*-- scss:rules --*/
+.navbar-brand {
+  font-weight: bold;
+  font-size: 1.2em;
+}
+
+.value-box {
+  background: linear-gradient(135deg, $light 0%, #e9ecef 100%);
+  border-radius: 8px;
+  padding: 20px;
+  margin: 10px 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.value-box-title {
+  font-size: 0.9em;
+  color: $dark;
+  margin-bottom: 5px;
+}
+
+.value-box-value {
+  font-size: 2em;
+  font-weight: bold;
+  color: $primary;
+}
+
+.filter-panel {
+  background: linear-gradient(135deg, $light 0%, #e9ecef 100%);
+  padding: 15px;
+  border-radius: 8px;
+  margin: 10px 0;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.card {
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin: 10px 0;
+}
+
+.card-header {
+  background-color: $primary;
+  color: white;
+  font-weight: bold;
+  padding: 15px;
+  border-radius: 8px 8px 0 0;
+}
+
+.quick-stats {
+  background: linear-gradient(135deg, $light 0%, #e9ecef 100%);
+  padding: 15px;
+  border-radius: 8px;
+  margin: 10px 0;
+}
+
+.alert-quality {
+  background-color: #ffebee;
+  border-left: 4px solid $danger;
+  padding: 10px;
+  margin: 5px 0;
+}
+
+.plotly-container {
+  margin: 10px 0;
+}
+
+.reactable-container {
+  margin: 10px 0;
+}

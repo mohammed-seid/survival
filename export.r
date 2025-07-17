@@ -92,8 +92,16 @@ unlink("docs", recursive = TRUE)
 
 options(timeout = 300)
 
-# Export the Shiny app to a static site
-shinylive::export("myapp", "docs")
+
+# Re-export with all dependencies
+shinylive::export(
+  appdir = "myapp",  # Folder containing app.R
+  destdir = "docs",             # Target directory
+  verbose = TRUE                # Show progress
+)
+
+
+
 
 # Serve the static site using httpuv
 library(httpuv)
@@ -105,3 +113,16 @@ httpuv::runStaticServer("docs")  # Open browser to check for errors
 
 
 
+
+
+# Deploy the app to shinyapps.io
+# install.packages('rsconnect')
+
+# rsconnect::setAccountInfo(name='mohammed-seid',
+# token='AD5F3CF8AEDB0FE652E091FE3F32E403', #secret='K98uz77gfZEavzY5xNuTdNhYG2f/zsE0NBw6fKur')
+
+#library(rsconnect)
+
+#rsconnect::deployApp('C:/Users/Lenovo/Documents/github/survival/myapp/app.R')
+
+getwd()
