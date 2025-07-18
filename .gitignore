@@ -1,6 +1,36 @@
+# R and RStudio files
 .Rproj.user
 .Rhistory
 .RData
 .Ruserdata
 
+# Quarto
 /.quarto/
+
+# Environment variables and secrets
+.env
+.env.local
+.env.production
+
+# Data files (optional - uncomment if you don't want to commit data)
+# data/*.rds
+# data/*.csv
+# data/*.json
+
+# Cache and temporary files
+*_cache/
+*_files/
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+
+# Logs
+*.log
+
+# Backup files
+*.bak
+*.tmp
+*~

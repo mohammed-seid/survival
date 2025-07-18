@@ -1,0 +1,53 @@
+[build]
+  command = "quarto render"
+  publish = "docs"
+
+[build.environment]
+  R_VERSION = "4.3.0"
+
+[[plugins]]
+  package = "netlify-plugin-r"
+
+[context.production]
+  command = "Rscript data/fetch_data.R && quarto render"
+
+[context.deploy-preview]
+  command = "quarto render"
+
+[context.branch-deploy]
+  command = "quarto render"
+
+# Redirect rules
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 404
+
+# Headers for better performance
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-XSS-Protection = "1; mode=block"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "*.css"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+
+[[headers]]
+  for = "*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+
+[[headers]]
+  for = "*.png"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"
+
+[[headers]]
+  for = "*.jpg"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000"

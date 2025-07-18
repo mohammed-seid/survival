@@ -1,12 +1,14 @@
-# Common data loading script for all pages
-# This script fetches data from CommCare and processes it
+# Common configuration and utilities for Survival Survey Dashboard
+# This file contains shared functions, styling, and configuration
 
-library(httr)
-library(jsonlite)
+# Load required libraries
 library(dplyr)
 library(tidyr)
 library(lubridate)
 library(stringr)
+library(plotly)
+library(reactable)
+library(DT)
 
 # Helper functions
 format_percent <- function(x, digits = 1) {
@@ -17,93 +19,72 @@ format_number <- function(x, digits = 0) {
   format(round(x, digits), big.mark = ",", scientific = FALSE)
 }
 
-# Configuration
-USERNAME <- "mohammed.seidhussen@oneacrefund.org"
-API_KEY <- "a749d18804539c5a2210817cda29630391a088bd"
-PROJECT_SPACE <- "oaf-ethiopia"
-FORM_ID <- "e24ab639e5b7d1b609cf2894f7057b75"
+# Configuration (use environment variables for security in production)
+USERNAME <- Sys.getenv("COMMCARE_USERNAME", "your_username_here")
+PASSWORD <- Sys.getenv("COMMCARE_PASSWORD", "your_password_here")
+PROJECT_SPACE <- Sys.getenv("COMMCARE_PROJECT", "oaf-ethiopia")
+FORM_ID <- Sys.getenv("COMMCARE_FORM_ID", "e24ab639e5b7d1b609cf2894f7057b75")
 
-# API Endpoint
-url <- paste0("https://www.commcarehq.org/a/", PROJECT_SPACE, "/api/v0.5/odata/forms/", FORM_ID, "/feed")
+# Custom color palette
+custom_colors <- list(
+  primary = "#2E8B57",      # Sea Green
+  secondary = "#4682B4",    # Steel Blue
+  success = "#28a745",      # Green
+  warning = "#ffc107",      # Yellow
+  danger = "#dc3545",       # Red
+  info = "#17a2b8",         # Cyan
+  light = "#f8f9fa",        # Light Gray
+  dark = "#343a40",         # Dark Gray
+  gradient = c("#2E8B57", "#4682B4", "#17a2b8", "#28a745", "#ffc107", "#dc3545")
+)
 
-# Enhanced data fetching with progress tracking
-limit <- 2000
-offset <- 0
-all_records <- list()
+# Load data using centralized data loading system
+source("data/load_data.R")
 
-cat("Fetching data from CommCare...\n")
+# Load processed data
+tryCatch({
+  df_completed <- ensure_data_available()
+  cat("✅ Data loaded successfully\n")
+}, error = function(e) {
+  cat("❌ Error loading data:", e$message, "\n")
+  cat("ℹ️  Please run data/fetch_data.R to fetch and process data\n")
+  
+  # Create empty dataframe as fallback
+  df_completed <- data.frame()
+})
 
-while (TRUE) {
-  # Set query parameters
-  query <- list(
-    limit = limit,
-    offset = offset
-  )
-  
-  # Make API request
-  response <- GET(
-    url,
-    query = query,
-    authenticate(USERNAME, API_KEY, type = "basic")
-  )
-  
-  # Check response
-  if (status_code(response) != 200) {
-    cat(paste0("Error: ", status_code(response), "\n"))
-    cat(content(response, "text"), "\n")
-    break
-  }
-  
-  # Parse response
-  data <- fromJSON(content(response, "text"))
-  records <- data$value
-  
-  if (length(records) == 0) {
-    break
-  }
-  
-  # Add records to collection
-  all_records <- c(all_records, records)
-  
-  # Check if we have all records
-  if (length(records) < limit) {
-    break
-  }
-  
-  # Update offset for next page
-  offset <- offset + limit
-  cat(paste0("Fetched ", length(all_records), " records so far...\n"))
+# Common plot styling function
+style_plot <- function(p, title = "", subtitle = "") {
+  p %>%
+    layout(
+      title = list(
+        text = paste0("<b>", title, "</b><br><sub>", subtitle, "</sub>"),
+        font = list(size = 16, color = custom_colors$dark)
+      ),
+      font = list(family = "Arial, sans-serif", size = 12),
+      plot_bgcolor = "rgba(0,0,0,0)",
+      paper_bgcolor = "rgba(0,0,0,0)",
+      margin = list(t = 80, b = 60, l = 60, r = 60)
+    )
 }
 
-# Convert to data frame
-df_raw <- bind_rows(all_records)
-
-# Drop farmer name and phone number 
-df_raw <- df_raw %>% 
-  select(-any_of(c("farmer_name", "name", "phone_no", "tno")))
-
-cat(paste0("Successfully fetched ", nrow(df_raw), " records from CommCare\n"))
-
-# Process the data
-df_processed <- df_raw %>%
-  mutate(across(everything(), ~ na_if(., "---"))) %>%
-  mutate(across(where(is.list), ~ sapply(., function(x) if(length(x) > 0) x[1] else NA))) %>%
-  mutate(
-    completed_time = ymd_hms(completed_time),
-    started_time = ymd_hms(started_time)
-  ) %>%
-  mutate(
-    date = as.Date(completed_time),
-    week = floor_date(date, "week"),
-    month = floor_date(date, "month"),
-    hour_started = hour(started_time),
-    day_of_week = wday(date, label = TRUE, week_start = 1),
-    is_weekend = day_of_week %in% c("Sat", "Sun"),
-    duration_minutes = as.numeric(difftime(completed_time, started_time, units = "mins")),
-    is_night_survey = hour_started >= 19 | hour_started < 6,
-    is_short_survey = duration_minutes <= 5,
-    is_long_survey = duration_minutes >= 60
-  ) %>%
-  mutate(across(c(starts_with("ps_num_planted_"), starts_with("num_surv_")), as.numeric))
-
-df_completed <- df_processed %>% filter(consent == 1)
+# Common reactable styling
+style_reactable <- function(data, ...) {
+  reactable(
+    data,
+    theme = reactableTheme(
+      headerStyle = list(
+        backgroundColor = custom_colors$primary,
+        color = "white",
+        fontWeight = "bold"
+      ),
+      stripedColor = custom_colors$light,
+      borderColor = "#ddd"
+    ),
+    defaultPageSize = 10,
+    showPageSizeOptions = TRUE,
+    pageSizeOptions = c(10, 25, 50, 100),
+    searchable = TRUE,
+    ...
+  )
+}

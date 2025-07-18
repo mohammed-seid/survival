@@ -1,173 +1,225 @@
-# Survival Survey Dashboard - Quarto Website
+# 🌱 Survival Survey Dashboard
 
-This interactive Quarto website replaces the original Shiny application with enhanced functionality and better performance. The website provides comprehensive analysis of survey data fetched directly from CommCare with real-time data updates.
+An interactive web dashboard for analyzing agricultural survey data, built with Quarto and R. This dashboard provides comprehensive insights into survey performance, agricultural outcomes, and data quality metrics.
 
-## Features
+## 🚀 Live Demo
 
-### 📊 Executive Summary
-- Key performance indicators (KPIs)
-- Daily survey progress tracking
-- Target achievement monitoring
-- Geographic distribution analysis
-- Weekly trends analysis
+- **GitHub Pages**: [Your GitHub Pages URL]
+- **Netlify**: [Your Netlify URL]
 
-### 👥 Enumerator Performance
-- Individual performance metrics
-- Target vs actual comparison
-- Productivity heatmaps
-- Quality alerts for short and night surveys
-- Performance distribution analysis
+## 📊 Features
 
-### 🌱 Agricultural Analysis
-- Tree survival rates by species
-- Detailed species performance tables
-- Planted vs survived comparisons
-- Species distribution analysis
-- Performance categorization
+- **Executive Summary**: Overview of key metrics and trends
+- **Enumerator Performance**: Analysis of survey team productivity and quality
+- **Agricultural Analysis**: Tree planting and survival rate insights
+- **Site Analysis**: Geographic and location-based performance
+- **Data Explorer**: Interactive data table with filtering and export
+- **Advanced Analytics**: Funnel analysis and trend forecasting
 
-### 🏢 Site Analysis
-- Site performance overview
-- Comprehensive comparison tables
-- Survival rates by site
-- Duration analysis
-- Efficiency scoring
+## 🏗️ Project Structure
 
-### 🔍 Data Explorer
-- Interactive data table with export capabilities
-- Dynamic visualizations
-- Cross-tabulation analysis
-- Real-time summary statistics
+```
+survival/
+├── 📁 data/                    # Data management
+│   ├── fetch_data.R           # Data fetching from CommCare API
+│   ├���─ load_data.R            # Data loading utilities
+│   ├── README.md              # Data documentation
+│   ├── raw_data.rds           # Raw survey data
+│   ├── processed_data.rds     # Cleaned data for analysis
+│   └── data_summary.json      # Dataset metadata
+├── 📁 .github/workflows/      # GitHub Actions for deployment
+│   └── deploy.yml             # Automated deployment workflow
+├── 📁 docs/                   # Generated website (output)
+├── 📄 _common.R               # Shared configuration and utilities
+├── 📄 _quarto.yml             # Quarto website configuration
+├── 📄 index.qmd               # Executive Summary page
+├── 📄 enumerator-performance.qmd
+├── 📄 agricultural-analysis.qmd
+├── 📄 site-analysis.qmd
+├── 📄 data-explorer.qmd
+├── 📄 advanced-analytics.qmd
+├── 📄 styles.css              # Custom CSS styling
+├── 📄 custom.scss             # SCSS theme customization
+├── 📄 netlify.toml            # Netlify deployment configuration
+└── 📄 README.md               # This file
+```
 
-### 📈 Advanced Analytics
-- Survey completion funnel analysis
-- Duration distribution with statistical markers
-- Weekly trends with moving averages
-- Correlation analysis
-- Time series analysis
-- Performance clustering
-- Statistical summaries
+## 🛠️ Setup and Installation
 
-## Data Source
+### Prerequisites
 
-### CommCare Integration
-The website fetches data directly from CommCare using the API with the following configuration:
+- R (version 4.0 or higher)
+- Quarto CLI
+- Git
 
-- **Username**: mohammed.seidhussen@oneacrefund.org
-- **Project Space**: oaf-ethiopia  
-- **Form ID**: e24ab639e5b7d1b609cf2894f7057b75
+### Required R Packages
 
-### Data Processing
-- Automatic data fetching with progress tracking
-- Real-time data processing and cleaning
-- Privacy protection (sensitive fields automatically excluded)
-- Data validation and type conversion
-
-### Expected Data Structure
-The data should contain the following key columns:
-- `consent`: Survey consent status
-- `completed_time`, `started_time`: Timestamp data
-- `site`, `woreda`, `username`: Geographic and enumerator information
-- `duration_minutes`: Survey duration
-- `hh_size`, `education_level`, `age`, `sex`: Demographic data
-- `ps_num_planted_*`, `num_surv_*`: Tree planting and survival data
-
-**Note**: Sensitive fields (`farmer_name`, `name`, `phone_no`, `tno`) are automatically excluded for privacy.
-
-## Technical Requirements
-
-### R Packages Required
 ```r
 install.packages(c(
-  "quarto",
-  "httr",
-  "jsonlite", 
-  "dplyr", 
-  "tidyr",
-  "lubridate",
-  "stringr", 
-  "plotly",
-  "reactable",
-  "DT",
-  "htmlwidgets",
-  "htmltools",
-  "zoo",
-  "tibble"
+  "httr", "jsonlite", "dplyr", "tidyr", 
+  "lubridate", "stringr", "plotly", 
+  "reactable", "DT", "readr"
 ))
 ```
 
-## How to Use
+### Local Development
 
-### 1. Render the Website
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/survival.git
+   cd survival
+   ```
+
+2. **Set up data**
+   ```r
+   # Option 1: Fetch fresh data (requires CommCare credentials)
+   source("data/fetch_data.R")
+   
+   # Option 2: Use existing data files (if available)
+   # Data files should be in the data/ directory
+   ```
+
+3. **Render the website**
+   ```bash
+   quarto render
+   ```
+
+4. **Preview locally**
+   ```bash
+   quarto preview
+   ```
+
+## 🚀 Deployment
+
+### GitHub Pages
+
+1. **Enable GitHub Pages** in repository settings
+2. **Set up secrets** in repository settings:
+   - `COMMCARE_USERNAME`
+   - `COMMCARE_PASSWORD`
+   - `COMMCARE_PROJECT`
+   - `COMMCARE_FORM_ID`
+
+3. **Push to main branch** - GitHub Actions will automatically build and deploy
+
+### Netlify
+
+1. **Connect repository** to Netlify
+2. **Set environment variables** in Netlify dashboard:
+   - `COMMCARE_USERNAME`
+   - `COMMCARE_PASSWORD`
+   - `COMMCARE_PROJECT`
+   - `COMMCARE_FORM_ID`
+
+3. **Deploy** - Netlify will automatically build using `netlify.toml` configuration
+
+### Manual Deployment
+
 ```bash
+# Fetch latest data
+Rscript data/fetch_data.R
+
+# Render website
 quarto render
+
+# Deploy the docs/ folder to your hosting service
 ```
 
-### 2. Preview the Website
+## 📊 Data Management
+
+### Data Sources
+
+- **Primary**: CommCare API (real-time data)
+- **Fallback**: Local data files (for offline development)
+
+### Data Workflow
+
+1. **Fetch**: `data/fetch_data.R` retrieves data from CommCare API
+2. **Process**: Clean and standardize data format
+3. **Save**: Store both raw and processed versions
+4. **Load**: Analysis scripts use `data/load_data.R` utilities
+
+### Data Updates
+
+- **Automatic**: GitHub Actions runs daily at 6 AM UTC
+- **Manual**: Run `source("data/fetch_data.R")` locally
+- **On-demand**: Use GitHub Actions workflow dispatch
+
+## 🔧 Configuration
+
+### Environment Variables
+
+For production deployment, set these environment variables:
+
 ```bash
-quarto preview
+COMMCARE_USERNAME=your_username
+COMMCARE_PASSWORD=your_password
+COMMCARE_PROJECT=your_project_space
+COMMCARE_FORM_ID=your_form_id
 ```
 
-### 3. Publish the Website
-The website will be generated in the `docs/` folder and can be:
-- Hosted on GitHub Pages
-- Deployed to Netlify, Vercel, or similar platforms
-- Served from any web server
+### Customization
 
-## Key Improvements
+- **Colors**: Edit `custom_colors` in `_common.R`
+- **Styling**: Modify `styles.css` and `custom.scss`
+- **Layout**: Update `_quarto.yml` configuration
+- **Content**: Edit individual `.qmd` files
 
-### Real-time Data
-- Direct CommCare API integration
-- Automatic data fetching and processing
-- No manual data export/import required
-- Always up-to-date information
+## 📈 Analytics Features
 
-### Enhanced Performance
-- Static generation with interactive JavaScript
-- No server required for hosting
-- Better caching and load times
-- Responsive design for all devices
+### Key Metrics
+- Total surveys completed
+- Survey completion rates
+- Data quality indicators
+- Geographic distribution
+- Temporal trends
 
-### Privacy & Security
-- Automatic exclusion of sensitive personal data
-- Secure API authentication
-- No local data storage required
+### Visualizations
+- Interactive charts with Plotly
+- Responsive data tables with Reactable
+- Geographic mapping
+- Time series analysis
+- Performance heatmaps
 
-### Interactive Features
-- Advanced data tables with filtering and export
-- Interactive visualizations with hover details
-- Cross-tabulation analysis
-- Statistical summaries and trends
+### Export Options
+- CSV data export
+- PDF report generation
+- Excel file downloads
+- Chart image exports
 
-## Advantages over Shiny App
+## 🔒 Security
 
-1. **Real-time Data**: Direct API integration eliminates manual data updates
-2. **Better Performance**: Static generation with interactive JavaScript
-3. **No Server Required**: Can be hosted on any static hosting service
-4. **Privacy Protection**: Automatic exclusion of sensitive data
-5. **Easy Deployment**: Simple file upload to hosting service
-6. **Better Caching**: Faster load times for repeat visitors
-7. **Mobile Friendly**: Responsive design works on all devices
+- Credentials stored as environment variables
+- No sensitive data in repository
+- HTTPS enforcement
+- Security headers configured
 
-## Customization
+## 🤝 Contributing
 
-### API Configuration
-Update the CommCare credentials in each page's setup section:
-```r
-USERNAME <- "your-username@domain.com"
-API_KEY <- "your-api-key"
-PROJECT_SPACE <- "your-project-space"
-FORM_ID <- "your-form-id"
-```
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test locally with `quarto preview`
+5. Submit a pull request
 
-### Colors and Themes
-Edit `custom.scss` and `styles.css` to modify the visual appearance.
+## 📝 License
 
-### Adding New Pages
-Create new `.qmd` files and add them to the `_quarto.yml` navigation.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-### Modifying Visualizations
-Each page contains R code chunks that can be modified to change visualizations.
+## 📞 Support
 
-## Support
+For questions or issues:
+- Create an issue in this repository
+- Contact the development team
+- Check the documentation in the `data/` folder
 
-For questions or issues, please refer to the [Quarto documentation](https://quarto.org/) or create an issue in the project repository.
+## 🔄 Version History
+
+- **v1.0**: Initial dashboard with basic analytics
+- **v1.1**: Added data management system
+- **v1.2**: Improved deployment configuration
+- **Current**: Enhanced structure for easy deployment
+
+---
+
+Built with ❤️ using [Quarto](https://quarto.org/) and [R](https://www.r-project.org/)

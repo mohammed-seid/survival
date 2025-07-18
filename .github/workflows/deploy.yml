@@ -1,46 +1,75 @@
-name: Deploy Shinylive App to GitHub Pages
+name: Deploy Quarto Website
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
+  schedule:
+    # Run daily at 6 AM UTC to update data
+    - cron: '0 6 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build-deploy:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup R
+      uses: r-lib/actions/setup-r@v2
+      with:
+        r-version: '4.3.0'
         
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+    - name: Setup R dependencies
+      uses: r-lib/actions/setup-r-dependencies@v2
+      with:
+        packages: |
+          any::httr
+          any::jsonlite
+          any::dplyr
+          any::tidyr
+          any::lubridate
+          any::stringr
+          any::plotly
+          any::reactable
+          any::DT
+          any::readr
+          
+    - name: Setup Quarto
+      uses: quarto-dev/quarto-actions/setup@v2
+      
+    - name: Create data directory
+      run: mkdir -p data
+      
+    - name: Fetch and process data
+      env:
+        COMMCARE_USERNAME: ${{ secrets.COMMCARE_USERNAME }}
+        COMMCARE_PASSWORD: ${{ secrets.COMMCARE_PASSWORD }}
+        COMMCARE_PROJECT: ${{ secrets.COMMCARE_PROJECT }}
+        COMMCARE_FORM_ID: ${{ secrets.COMMCARE_FORM_ID }}
+      run: |
+        if [ -n "$COMMCARE_USERNAME" ] && [ -n "$COMMCARE_PASSWORD" ]; then
+          echo "Fetching fresh data from CommCare API..."
+          Rscript data/fetch_data.R
+        else
+          echo "CommCare credentials not available, using existing data files..."
+        fi
         
-      - name: Create deployment directory
-        run: |
-          mkdir -p _site
-          cp index.html _site/
-          cp app_simple.html _site/
-          cp README_SHINYLIVE.md _site/
-          
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: '_site'
-          
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+    - name: Render Quarto website
+      run: quarto render
+      
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: peaceiris/actions-gh-pages@v3
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        publish_dir: ./docs
+        
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: website
+        path: docs/
