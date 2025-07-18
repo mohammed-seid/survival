@@ -13,8 +13,7 @@ execute:
 #| include: false
 library(httr)
 library(jsonlite)
-library(dplyr)
-library(tidyr)
+library(tidyverse)
 library(lubridate)
 library(stringr)
 library(plotly)

@@ -11,3 +11,8 @@ crosstalk
 htmltools
 httr
 jsonlite
+tidyverse
+tibble
+readr
+purrr
+forcats
